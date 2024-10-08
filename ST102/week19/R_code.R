@@ -1,0 +1,5 @@
+x <- c(5,10,15,20,25,30,32)
+y <- c(17.1,29.6,63.6,117.1,186.4,246.5,285.1)
+data <- data.frame(x=x,y=y)
+simple_linear_model <- lm(y~x, data=data)
+summary(simple_linear_model)
