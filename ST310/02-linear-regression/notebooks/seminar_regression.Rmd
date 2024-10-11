@@ -6,6 +6,7 @@ output: html_document
 
 ```{r setup, message = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+install.packages("gapminder")
 library(tidyverse)
 library(gapminder)
 library(broom)
@@ -22,6 +23,17 @@ theme_set(theme_minimal(base_size = 22))
 gm2007 <- gapminder %>% filter(year == 2007)
 model_lm <- lm(lifeExp ~ gdpPercap, data = gm2007)
 model_lm
+```
+%>%: used to chain multiple functions in a sequence
+```{r}
+result <- mean(sqrt(abs(my_vector)))
+
+result <- my_vector %>%
+  abs() %>%
+  sqrt() %>%
+  mean()
+
+
 ```
 
 
@@ -67,6 +79,10 @@ augment(model_lm) %>%
             RSE = sqrt(RSS / (n() - 2)),
             std.error = RSE / sqrt(sum( (gdpPercap - mean(gdpPercap))^2 ))  )
 ```
+augment: used to add additional information to the output of model objects. Specifically, it adds columns such as residuals, fitted values, and other diagnostic information related to the model to the data.
+```{r}
+augment(model_lm)
+```
 
 ### Model diagnostics
 
@@ -84,15 +100,18 @@ $$
 cor(gm2007$gdpPercap, gm2007$lifeExp)^2
 ```
 
+ESS (Explained Sum of Squares): The variation explained by the regression model.
+RSS (Residual Sum of Squares): The variation not explained by the model.
 $$
-R^2 = 1 - \frac{\text{RSS}}{\text{TSS}}
+R^2 = \frac{\text{ESS}}{\text{TSS}} =1 - \frac{\text{RSS}}{\text{TSS}}
 $$
-
+$R^2$ is the proportion of variance explained by the model.
+A higher $R^2$ indicates a better fit of the regression model.
 
 ```{r}
 augment(model_lm) %>%
-  summarize(RSS = sum(.resid^2),
-            TSS = sum( (lifeExp - mean(lifeExp))^2),
+  summarize(RSS = sum(.resid^2), # sum(y_i-hat(y_i))
+            TSS = sum( (lifeExp - mean(lifeExp))^2), #sum(y_i-y_bar) 
             R2 = 1 - RSS/TSS)
 ```
 
@@ -119,16 +138,33 @@ Point with high `cooksd` values
 ```{r}
 plot(model_lm)
 ```
+Residuals vs Fitted Plot: check for linearity and homoscedasticity (constant variance of residuals).
+
+Normal Q-Q Plot: check if the residuals are normally distributed.
+
+Scale-Location Plot: To check for homoscedasticity (constant variance of residuals). The residuals should appear randomly scattered along the horizontal line. A fan shape (i.e., residuals spreading out as fitted values increase) indicates heteroscedasticity.
+
+Residuals vs Leverage Plot: To identify influential points (outliers or points with high leverage).
 
 ```{r}
 library(GGally)
 ggnostic(model_lm)
 ```
+ First panel: There seems to be some curvature at lower values of gdpPercap, suggesting that the relationship between gdpPercap and lifeExp might not be strictly linear, particularly at the lower range of GDP per capita.
+ Second panel: This plot likely represents the residual standard error. If the spread remains constant across the values of gdpPercap, it suggests homoscedasticity (constant variance).
+Third panel: This plot shows hat values (leverage) on the y-axis and gdpPercap on the x-axis. Leverage measures how much an observation influences the fit of the regression model.
+Last panel: This shows Cook's distance, a measure of influence, on the y-axis and gdpPercap on the x-axis. Cook's distance combines both leverage and residual size to identify influential points. In this case, most Cook's distances are close to zero, indicating that there are no extremely influential points.
 
 
 
 **Question**: with flexible models, are influential observations more or less harmful, and in which ways?
+YES: 
+The downside of flexible models is that they are more prone to overfitting, especially when the model becomes too complex. Influential observations can cause flexible models to fit the noise rather than the true signal. This is particularly harmful if the influential observation is an outlier or represents some erroneous or rare case in the data. For example, in a neural network, a highly influential point can push the model to adjust weights in a way that the network overfits to that particular observation, leading to poorer generalization to new data.
 
+NO:
+Flexible models have the ability to capture more complex patterns and relationships in the data. As a result, they are often less sensitive to influential observations because they can adjust to the peculiarities of the data, including outliers or points with high leverage. For example, in models like random forests or support vector machines, individual points tend to have less overall impact because the model can adjust its predictions locally or focus on a subset of the data.
+
+Tool: Many flexible models use regularization techniques (like L2 regularization in ridge regression, L1 in Lasso, or dropout in neural networks) to mitigate the impact of influential observations and reduce overfitting. Regularization penalizes extreme coefficients or weights, reducing the model's sensitivity to influential points.
 
 
 ## Multiple regression
@@ -143,6 +179,10 @@ ggnostic(model_lm)
 ### Estimation
 
 ```{r}
+model_1 <- lm(lifeExp ~ gdpPercap + I(gdpPercap^2), data = gm2007)
+#I(X^2) makes sure R interprets it as a square term instead of an interactin term. Interaction is how multiple variables together influence the outcome. So without I, if we just write gdpPercap^2, it is the same as gdpPercap
+# Summary of the model
+summary(model_1)
 
 ```
 
@@ -150,15 +190,27 @@ ggnostic(model_lm)
 ### Inference
 
 ```{r}
+augment(model_1) %>%
+  summarize(RSS = sum(.resid^2),
+            RSE = sqrt(RSS / (n() - 2)),
+            std.error = RSE / sqrt(sum( (gdpPercap - mean(gdpPercap))^2 ))  )
 
 ```
+
+```{r}
+augment(model_1) %>%
+  summarize(RSS = sum(.resid^2), # sum(y_i-hat(y_i))
+            TSS = sum( (lifeExp - mean(lifeExp))^2), #sum(y_i-y_bar) 
+            R2 = 1 - RSS/TSS)
+```
+
 
 Hint: plot confidence intervals with `ggcoef` in `GGally` package
 
 ### Diagnostics
 
 ```{r}
-
+plot(model_1)
 ```
 
 ### Problem: high dimensional plots...
@@ -167,3 +219,11 @@ e.g. `ggpairs` shows many 2-dimensional projections of the data, but there is no
 
 **Question**: What does this mean for diagnostic plots when our regression model is high dimensional (e.g. p > 3 predictors)
 
+Loss of Information in 2D Projections:
+2D projections (e.g., scatterplots between two variables) cannot fully capture the complexity of high-dimensional relationships. In high-dimensional spaces, important relationships, interactions, or residual patterns might only be visible when considering multiple variables simultaneously. Focusing on 2D projections can mask these high-dimensional patterns. For instance, while ggpairs can help visualize pairwise correlations, it fails to show how combinations of three or more predictors jointly influence the response variable or residuals. This can lead to missed patterns, such as interactions between variables or multicollinearity that becomes evident only in higher dimensions.
+
+Complex Interactions and Non-Linearity:
+High-dimensional models can involve interactions between predictors that are not obvious in 2D plots. For example, two predictors might not show a strong relationship with the outcome when considered individually, but when combined, they might have a significant interactive effect on the outcome. Non-linear effects (e.g., quadratic terms or higher-order polynomial terms) can also be difficult to detect in 2D projections. These effects may only manifest when viewed in multi-dimensional spaces.
+
+Residual Patterns Can Be Multidimensional:
+Residuals may exhibit patterns across combinations of predictors that are not apparent in 2D residual plots. For example, in a high-dimensional model, heteroscedasticity (non-constant variance) might only be present when considering the joint effect of multiple predictors, which a 2D plot would fail to reveal. Even if residuals appear randomly scattered in 2D plots, there could be systematic patterns when considering more dimensions, leading to potential problems like hidden bias, missed non-linearity, or interactions.
