@@ -7,6 +7,7 @@ output: html_document
 ```{r setup, message = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(ggplot2)
 theme_set(theme_minimal(base_size = 14))
 set.seed(1)
 ```
@@ -51,13 +52,19 @@ X_new <- X + 1 # constant additive intervention
 
 #### Propagating the intervention
 
-After intervening on a variable we have to re-generate all the other variables that depend on it using its new values.
+After intervening on a variable we have to re-generate all the other variables that depend on it using its new values. Usually we call the variable with intervention Treatment group and the other Control group, denoted by $Y(1)$ and $Y(0)$.
 
 ```{r}
 Y_new <- Y_CEF(X_new) + rnorm(n)
 ```
 
 #### Measuring the causal effect
+$$ATE = \mathbb{E}[Y(1)]-\mathbb{E}[Y(0)]$$
+In this case, 
+$$Y(1)=X_{new}=X+1~~;~~ Y(0)=X $$ 
+Randomized Controlled Trials (RCTs): In an ideal setting, ATE is estimated using randomized experiments where treatment assignment is random. This ensures that the treatment and control groups are comparable. In this scenario,
+$$\hat{ATE}=\frac{1}{N_T}\sum_{i\in Treatment}Y_i(1)-\frac{1}{N_C}\sum_{i\in Control}Y_i(0)$$
+Observational Studies: When randomized experiments aren’t possible, observational data is used.
 
 ```{r}
 # Average causal effect (ATE)
@@ -71,10 +78,36 @@ There is another possible treatment effect we may be interested in. Sometimes th
 qplot(X, Y_new - Y, geom=c("smooth", "point")) +
   geom_hline(yintercept = mean(Y_new - Y))
 ```
+In the above plot, variable X is conditioned on different values and we can observe various ATE according to various values of X.
 
 **Exercise**: Can you change `Y_CEF` so that the regression estimate is highly misleading?
 
 **Exercise**: Can you make the `ATE` and the `CATE` provide very different conclusions about the causal effect of `X`?
+
+The following is a concrete example answering the above questions:
+```{r}
+# Generate data
+n <- 500
+X <- rnorm(n, mean = 0) 
+epsilon <- rnorm(n, sd = 0.5)  
+Y_CEF <- function(X) ifelse(X > 0, 2 * X^2, -3 * X) 
+Y <- Y_CEF(X) + epsilon
+X_new <- X + 1 
+Y_new <- Y_CEF(X_new) + epsilon  
+ggplot(data.frame(X, Y_diff = Y_new - Y), aes(x = X, y = Y_diff)) +
+  geom_point() +
+  geom_smooth(method = "loess", color = "blue") +  
+  geom_hline(yintercept = mean(Y_new - Y), linetype = "dashed", color = "red") +  
+  labs(title = "CATE and ATE: How the Treatment Effect Varies by X",
+       x = "X (Covariate)", y = "Treatment Effect (Y_new - Y)") +
+  theme_minimal()
+
+ATE <- mean(Y_new - Y)
+CATE_positive <- mean(Y_new[X > 0] - Y[X > 0])  # CATE for X > 0
+CATE_negative <- mean(Y_new[X <= 0] - Y[X <= 0])  # CATE for X <= 0
+```
+When $X>0$, $Y=2*X^2$, $Y_{new}=2*(X+1)^2$, $Y_{new}-Y=4X+2$, which is linear in $X$, and it does not aligh with ATE; When $X<0$, $Y=-3*X$, $Y_{new}=-3*(X+1)$, $Y_{new}-Y=-3$, which does not vary with $X$, but it does not equal to ATE. This results in very different ATE and CATE. And on the domain $X>0$, the function is quadratic instead of linear, this leads to non-constant (if we exclude random noise) CATE, which means linear regression estimate is misleading, because the intervention is constant additive, if the relationship is linear, the CATE should be constant.
+
 
 ### Unmeasured confounder `X <- U -> Y`
 
@@ -120,7 +153,7 @@ Y_new <- Y_CEF(U_new) + rnorm(n)
 
 #### Measuring the causal effect
 
-All causal effects on `Y` are 0
+All causal effects on `Y` are 0 (just random noise around 0)
 
 ```{r}
 # ATE
@@ -173,7 +206,7 @@ Y_new <- Y_CEF(X_new, Z_new) + rnorm(n)
 ```
 
 #### Measuring the causal effect
-
+The ATE is -3, because the coefficient for X is -3, and the intervention is 1.
 ```{r}
 mean(Y_new - Y)
 ```
@@ -208,12 +241,12 @@ Z_new <- Z + 1
 X_new <- X
 Y_new <- Y_CEF(X_new, Z_new) + rnorm(n)
 ```
-
+In this example we cut the link from Z to X, which usually violates the assumptions in causal inference.
 #### Measuring the causal effect
-
 ```{r}
 mean(Y_new - Y)
 ```
+ATE is around 2, why?
 
 CATE at different values of `X`
 
@@ -250,24 +283,80 @@ Y_new <- Y_CEF(X_new, Z_new) + rnorm(n)
 ```{r}
 mean(Y_new - Y)
 ```
+ATE is around 8, why?
+
 
 CATE at different values of `X`
-
-```{r message=FALSE}
-# Conditional average treatment effect (CATE)
+All these CATE plots are nearly symmetric, why?
+```{r}
 qplot(X, Y_new - Y, geom=c("smooth", "point")) +
   geom_hline(yintercept = mean(Y_new - Y))
 ```
-
-CATE at different values of `Z`
-
-```{r message=FALSE}
-# Conditional average treatment effect (CATE)
+```{r}
 qplot(Z, Y_new - Y, geom=c("smooth", "point")) +
   geom_hline(yintercept = mean(Y_new - Y))
 ```
+Because in the whole domain, X and Z follow the same structural function Y, which means the treatment varies significantly across different subgroups of the population (defined by covariates X or Z). When subgroup varies significantly, CATE will be asymmetric, like what we did in the first example.
 
-#### Experiment suggestions
+In above scenarios, we actually mimick RCTs: we know the true underlying function, then we add the intervention, followed by modelling the treatment. But what if RCTs are not available? Say we are given observations X and Y, and we dont know the true structural function, how can we infer that the real relationship between X and Y (which is Y=-3*X)? We need to infer the counterfactual relationship between X and Y given observations disrupted by unmeasured confounders. This is what causal inference scientists are researching and focusing. 
+
+There are several methods, here I give an example of using a popular instrumental variable method 2SLS(2 stage least square) against the OLS(ordinary least square, usually linear regression).
+```{r}
+# Set seed for reproducibility
+#install.packages("AER")
+#library(AER)
+set.seed(123)
+
+n <- 500 
+
+U <- rnorm(n, mean = 0, sd = 1)  # Unmeasured confounder
+
+Z <- rnorm(n, mean = 0, sd = 1)  # Instrumental variable Z
+
+X <- 0.8 * Z + 0.5 * U + rnorm(n, sd = 0.5)  # X depends on Z and U
+
+Y <- -3 * X + 3 * U + rnorm(n, sd = 0.5)  # True causal effect of X on Y is -3, but U confounds the relationship
+
+data <- data.frame(X, Y, Z)
+
+ols_model <- lm(Y ~ X, data = data)
+ols_predictions <- predict(ols_model)
+
+iv_model <- ivreg(Y ~ X | Z, data = data)  
+iv_predictions <- predict(iv_model)
+
+Y_true <- -3 * X  # True relationship between X and Y without the confounder
+
+plot_data <- data.frame(X = data$X, Y = data$Y, 
+                        OLS_Pred = ols_predictions, 
+                        IV_Pred = iv_predictions, 
+                        True_Y = Y_true)
+
+ggplot(plot_data, aes(x = X)) +
+  geom_point(aes(y = Y), alpha = 0.6, color = 'black') + 
+  geom_line(aes(y = True_Y, color = "True Structural Function", linetype = "True Structural Function"), size = 1) + 
+  geom_line(aes(y = OLS_Pred, color = "OLS Prediction", linetype = "OLS Prediction"), size = 1) + 
+  geom_line(aes(y = IV_Pred, color = "2SLS Prediction", linetype = "2SLS Prediction"), size = 1) +  
+  labs(title = "True Function, OLS, and 2SLS Predictions",
+       x = "X", y = "Y") +
+  scale_color_manual(name = "Model", values = c("True Structural Function" = "green", 
+                                                "OLS Prediction" = "red", 
+                                                "2SLS Prediction" = "blue")) +
+  scale_linetype_manual(name = "Model", values = c("True Structural Function" = "solid", 
+                                                   "OLS Prediction" = "solid", 
+                                                   "2SLS Prediction" = "solid")) +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  ggtitle("Comparison of True Structural Function, OLS, and 2SLS Predictions") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+In above example we can see that with the help of instruments Z and the 2SLS algorithm, we successfully recover the causal relationship between X and Y, but if we run ordinary linear regression, it fails to give accurate predictions.
+
+In the above example, we desing a perfect instrument that relates X, and it does not effect Y neither confounders. However, the search for such an instrument is very challenging in practice. In economic studies, the effort for seeking a good instrument is usually much more important than designing models.
+
+Finding instruments: Economists, epidemiologists
+Designing algorithms: Statisticians, machine learning scientists
 
 **Note**: In this example the generating code is copy/pasted in 3 places, so any change you make you need to make the same change in all 3 code chunks. You might want to copy/paste the entire section and only edit the new copy of it.
 
