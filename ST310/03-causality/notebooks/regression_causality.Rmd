@@ -11,14 +11,13 @@ library(ggplot2)
 theme_set(theme_minimal(base_size = 14))
 set.seed(1)
 ```
+## What is a Causal Inference Problem?
+A causal inference problem is one in which the goal is to determine the causal effect of an intervention or treatment on an outcome. Unlike simple statistical associations, causal inference aims to answer questions like "Does X cause Y?", rather than just describing correlations. For instance, a causal inference question might be "Does increasing advertising budget lead to higher sales?". The answer YES may seem convincing, but higher sales may have credit to various factors. For example, ice cream sells more in summer, regardless of advertising.
 
 ## Regression models with simulated data
 
-In this notebook we will do experiments to understand the limitations of using regression models to make conclusions about causality. We make an important **assumption** here that the way we generate data determines all causal relationships. Remember that this is an assumption we choose to adopt now, but that in general we do not always assume anything about causality in our simulations.
-
-For our purposes here the assumption works like this: if we change one variable then we must also propagate this change to any of the variables that functionally depend on it. Two examples below will make this clearer.
-
 ### Direct causation `X -> Y`
+In this example, we can imagine X: Advertising spend and Y: Sales.
 
 #### Causal model
 
@@ -31,8 +30,8 @@ X <- rnorm(n, mean = 1)
 Y_CEF <- function(X) 2 * X
 Y <- Y_CEF(X) + rnorm(n)
 ```
-
-What would we conclude from regression on data like this?
+$$Y=2X+U$$
+Random noise is independent of X, meaning there is no confounding variable affecting both X and Y. This makes correlation between X and Y reflects the causation between them.
 
 ```{r}
 # or GGally::ggcoef() for a plot
@@ -109,11 +108,14 @@ CATE_negative <- mean(Y_new[X <= 0] - Y[X <= 0])  # CATE for X <= 0
 When $X>0$, $Y=2*X^2$, $Y_{new}=2*(X+1)^2$, $Y_{new}-Y=4X+2$, which is linear in $X$, and it does not aligh with ATE; When $X<0$, $Y=-3*X$, $Y_{new}=-3*(X+1)$, $Y_{new}-Y=-3$, which does not vary with $X$, but it does not equal to ATE. This results in very different ATE and CATE. And on the domain $X>0$, the function is quadratic instead of linear, this leads to non-constant (if we exclude random noise) CATE, which means linear regression estimate is misleading, because the intervention is constant additive, if the relationship is linear, the CATE should be constant.
 
 
-### Unmeasured confounder `X <- U -> Y`
+### Unmeasured confounder `X <- U -> Y
+X: Ice cream sales
+Y: Number of drownings
+U: Temperature`
 
 #### Causal model
 
-In this world there is no causal relationship between `X` and `Y`
+In this world there is no causal relationship between `X` and `Y`, because ice cream sales does not affect the number of drownings.
 
 ```{r}
 n <- 1000
@@ -179,7 +181,11 @@ Y_CEF <- function(X, Z) 4 + 2 * Z - 3 * X
 Y <- Y_CEF(X, Z) + rnorm(n)
 ```
 
-Regression model outputs. Which of the coefficients below (if any) give the right answer to which causal questions?
+Z: Cold weather (e.g., temperature)
+X: Outdoor physical activity (e.g., frequency of outdoor exercise)
+Y: Health service utilization (e.g., visits to hospitals)
+
+Intuitively, Z negatively affects X and positively affects Y (in winter people are more likely to get flu). And X negatively affects Y.
 
 ```{r}
 lm(Y ~ Z) |> broom::tidy() |> knitr::kable()
