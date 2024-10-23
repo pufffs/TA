@@ -7,11 +7,13 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(tidyverse)
+#library(tidyverse)
+library(dplyr )
 # install.packages("broom") # if necessary
 library(broom)
 # install.packages("yardstick") # if necessary
-library(yardstick)
+#library(yardstick)
+install.packages("GGally")
 library(GGally)
 ```
 
@@ -32,6 +34,11 @@ nonzero_beta <-
   rep(1, sparsity) # or e.g. runif(sparsity, min = -1, max = 1)
 true_beta <- c(nonzero_beta, rep(0, p - sparsity))
 class_shift <- 2.5 # change this
+
+```
+
+```{r}
+px
 ```
 
 ```{r message=FALSE}
@@ -261,3 +268,249 @@ cbind(higher_subs_summary, lower_subs_summary) |>
 **Question**: Suppose we have trained a model on data that was subsampled to create class balance. Then we choose classification cutoffs to achieve a desired trade-off between precision/recall (or false positives and false negatives), and we do this still while using the subsampled training data. What will happen if we start using that model to classify data from a new or full dataset that hasn't been subsampled?
 
 **Answer**: Predictions on imbalanced data will achieve a different trade-off between false positives and false negatives. To calibrate this we would need to choose a different classification threshold that works on imbalanced data.
+
+
+
+# Logistic Regression
+
+**Logistic regression** is a popular statistical model used for binary classification problems. Unlike linear regression, which predicts a continuous value, logistic regression predicts a probability that a given instance belongs to one of two classes. This document provides a detailed mathematical overview of logistic regression.
+
+# 1. Sigmoid Function
+
+The logistic function, also known as the **sigmoid function**, is used to model the relationship between input features and the probability of the positive class:
+
+$$
+\sigma(z) = \frac{1}{1 + e^{-z}}
+$$
+
+where \( z \) is the linear combination of the input features:
+
+$$
+z = \mathbf{w}^T \mathbf{x} + b
+$$
+
+- \( \mathbf{w} \): Weights of the model.
+- \( \mathbf{x} \): Feature vector.
+- \( b \): Bias term.
+
+The output of the logistic function is a value between **0 and 1**, representing the predicted probability of the positive class.
+
+# 2. Log-Odds and Linear Relationship
+
+The **log-odds** (or **logit**) is the logarithm of the odds of the positive class. In logistic regression, the log-odds is modeled as a linear function of the input features:
+
+$$
+\text{logit}(p) = \log\left( \frac{p}{1 - p} \right) = \mathbf{w}^T \mathbf{x} + b
+$$
+
+where \( p \) is the predicted probability of the positive class.
+
+# 3. Cost Function and Maximum Likelihood Estimation
+
+The goal of logistic regression is to find the optimal parameters (weights and bias) that minimize the prediction error. Instead of using **Mean Squared Error**, logistic regression uses the **logistic loss** or **cross-entropy loss** function, which is defined as:
+
+$$
+J(\mathbf{w}, b) = -\frac{1}{m} \sum_{i=1}^m \left[ y^{(i)} \log(\hat{y}^{(i)}) + (1 - y^{(i)}) \log(1 - \hat{y}^{(i)}) \right]
+$$
+
+where:
+- \( m \): Number of training examples.
+- \( y^{(i)} \): True label of the \( i \)-th training example.
+- \( \hat{y}^{(i)} = \sigma(\mathbf{w}^T \mathbf{x}^{(i)} + b) \): Predicted probability for the \( i \)-th example.
+
+The cost function represents the **negative log-likelihood** of the data given the model parameters.
+
+# 4. Maximum Likelihood Derivation
+
+To estimate the parameters, we use **Maximum Likelihood Estimation (MLE)**. The likelihood function for logistic regression is:
+
+$$
+L(\mathbf{w}, b) = \prod_{i=1}^m \left( \hat{y}^{(i)} \right)^{y^{(i)}} \left( 1 - \hat{y}^{(i)} \right)^{1 - y^{(i)}}
+$$
+
+The **log-likelihood** is obtained by taking the logarithm of the likelihood function:
+
+$$
+\ell(\mathbf{w}, b) = \sum_{i=1}^m \left[ y^{(i)} \log(\hat{y}^{(i)}) + (1 - y^{(i)}) \log(1 - \hat{y}^{(i)}) \right]
+$$
+
+The **negative log-likelihood** is equivalent to the cost function, which we aim to minimize.
+
+# 5. Gradient Descent
+
+**Gradient descent** is an iterative optimization algorithm used to minimize the cost function. The process is as follows:
+
+1. **Initialize Parameters**: Start with random values for the weights \( \mathbf{w} \) and bias \( b \).
+2. **Compute Predictions**: For each training example, compute the predicted probability:
+   
+   $$
+   \hat{y}^{(i)} = \sigma(\mathbf{w}^T \mathbf{x}^{(i)} + b)
+   $$
+
+3. **Compute Cost**: Calculate the cost function \( J(\mathbf{w}, b) \).
+4. **Compute Gradients**: Calculate the gradients of the cost function with respect to the weights and bias:
+   
+   - For the weights \( \mathbf{w} \):
+
+     $$
+     \frac{\partial J(\mathbf{w}, b)}{\partial w_j} = \frac{1}{m} \sum_{i=1}^m \left( \hat{y}^{(i)} - y^{(i)} \right) x_j^{(i)}, \quad \text{for } j = 1, 2, \dots, n
+     $$
+
+   - For the bias \( b \):
+
+     $$
+     \frac{\partial J(\mathbf{w}, b)}{\partial b} = \frac{1}{m} \sum_{i=1}^m \left( \hat{y}^{(i)} - y^{(i)} \right)
+     $$
+
+5. **Update Parameters**: Update the weights and bias using a learning rate \( \alpha \):
+
+   $$
+   \mathbf{w} := \mathbf{w} - \alpha \frac{\partial J(\mathbf{w}, b)}{\partial \mathbf{w}}
+   $$
+
+   $$
+   b := b - \alpha \frac{\partial J(\mathbf{w}, b)}{\partial b}
+   $$
+
+6. **Repeat**: Repeat steps 2-5 until the cost function converges to a minimum.
+
+# 6. Hessian Matrix and Newton's Method
+
+An alternative optimization method is **Newton's Method**, which uses the **Hessian matrix** (second-order derivatives) to find the minimum of the cost function. The **Hessian matrix** for logistic regression is given by:
+
+$$
+H = \frac{1}{m} \sum_{i=1}^m \hat{y}^{(i)} (1 - \hat{y}^{(i)}) \mathbf{x}^{(i)} \mathbf{x}^{(i)T}
+$$
+
+The parameter update rule for Newton's method is:
+
+$$
+\theta := \theta - H^{-1} \nabla J(\theta)
+$$
+
+where \( \theta = [\mathbf{w}, b] \) is the vector of parameters, and \( \nabla J(\theta) \) is the gradient of the cost function.
+
+# 7. Probabilistic Interpretation
+
+Logistic regression can be interpreted as a **probabilistic model**. The predicted probability \( \hat{y} \) represents the conditional probability of the positive class given the input features:
+
+$$
+P(y = 1 \mid \mathbf{x}) = \sigma(\mathbf{w}^T \mathbf{x} + b)
+$$
+Concern of logistic regression: the log-likelihood function is maximized when the predicted probabilities approach 0 or 1 for all data points, which is only possible if the coefficients approach infinity. Have a look at the log-likelihood function, it is maximized either when $\hat y=0$ or $\hat y=1$. The predicted probability is 
+$$
+P(\hat y =1) =\frac{1}{1 + e^{-(\mathbf{w}^T \mathbf{x} + b)}}
+$$
+Hence to maximize the log-likelihood, the optimization process will drive $P(\hat y =1)$ to be 0 or 1. And this will drive $\mathbf{w}$ to be negative or positive infinity.
+
+
+
+
+# SVM
+The primal optimization problem for SVM aims to find a weight vector (**w**) and bias (**b**) that maximize the margin between classes while correctly classifying all training points.
+
+The primal problem can be expressed as follows:
+
+$$
+\min_{\mathbf{w}, b} \quad \frac{1}{2} \|\mathbf{w}\|^2
+$$
+
+Subject to:
+
+$$
+y_i (\mathbf{w}^T \mathbf{x}_i + b) \geq 1, \quad \forall i
+$$
+
+Where:
+- \( \mathbf{w} \) is the weight vector.
+- \( b \) is the bias.
+- \( y_i \in \{+1, -1\} \) are the class labels.
+- \( \mathbf{x}_i \) are the feature vectors of the training data points.
+
+# 2. Lagrangian Formulation and KKT Conditions
+
+To solve this constrained optimization problem, we introduce Lagrange multipliers \( \alpha_i \geq 0 \) for each constraint and form the Lagrangian:
+
+$$
+L_P(\mathbf{w}, b, \boldsymbol{\alpha}) = \frac{1}{2} \|\mathbf{w}\|^2 - \sum_{i=1}^n \alpha_i \left[ y_i (\mathbf{w}^T \mathbf{x}_i + b) - 1 \right]
+$$
+
+The **Karush-Kuhn-Tucker (KKT) conditions** are used to find the optimal solution. These include:
+
+1. **Stationarity**: \( \nabla_{\mathbf{w}} L_P = 0 \) and \( \nabla_b L_P = 0 \).
+   - This gives the optimal weight vector:
+     
+     $$
+     \mathbf{w} = \sum_{i=1}^n \alpha_i y_i \mathbf{x}_i
+     $$
+
+2. **Primal Feasibility**: The original constraints must hold for each training point.
+3. **Dual Feasibility**: \( \alpha_i \geq 0 \).
+4. **Complementary Slackness**: 
+
+   $$
+   \alpha_i \left[ y_i (\mathbf{w}^T \mathbf{x}_i + b) - 1 \right] = 0, \quad \forall i
+   $$
+
+# 3. Deriving the Dual Problem
+
+The dual problem is derived by substituting the expression for \( \mathbf{w} \) back into the Lagrangian, resulting in:
+
+$$
+\max_{\boldsymbol{\alpha}} \sum_{i=1}^n \alpha_i - \frac{1}{2} \sum_{i=1}^n \sum_{j=1}^n \alpha_i \alpha_j y_i y_j (\mathbf{x}_i^T \mathbf{x}_j)
+$$
+
+Subject to:
+
+1. \( \alpha_i \geq 0 \), for all \( i \).
+2. \( \sum_{i=1}^n \alpha_i y_i = 0 \).
+
+# 4. Solving the Dual Problem
+
+The dual problem is a **quadratic programming (QP)** problem involving a quadratic function and linear constraints. Various solvers are used to solve this problem, including **Sequential Minimal Optimization (SMO)** and libraries such as **LIBSVM** or **scikit-learn** in Python.
+
+The solution yields **support vectors** for which \( \alpha_i > 0 \), defining the optimal hyperplane.
+
+# 5. Computing the Optimal Weight Vector and Bias
+
+Once we have the optimal values for \( \alpha_i \), we can compute:
+
+- **Weight Vector**:
+  
+  $$
+  \mathbf{w} = \sum_{i=1}^n \alpha_i y_i \mathbf{x}_i
+  $$
+
+- **Bias Term** \( b \): Use any support vector \( \mathbf{x}_s \) (where \( \alpha_s > 0 \)):
+
+  $$
+  b = y_s - \mathbf{w}^T \mathbf{x}_s
+  $$
+
+# 6. Decision Function
+
+The decision function for classifying a new point \( \mathbf{x} \) is:
+
+$$
+ f(\mathbf{x}) = \text{sign}\left( \mathbf{w}^T \mathbf{x} + b \right) = \text{sign}\left( \sum_{i=1}^n \alpha_i y_i (\mathbf{x}_i^T \mathbf{x}) + b \right)
+$$
+
+# 7. The Kernel Trick
+
+For non-linear data, we use the **kernel trick** to map data into a higher-dimensional space without explicitly transforming it. The dot product \( \mathbf{x}_i^T \mathbf{x}_j \) is replaced by a **kernel function** \( K(\mathbf{x}_i, \mathbf{x}_j) \):
+
+- **Linear Kernel**: \( K(\mathbf{x}_i, \mathbf{x}_j) = \mathbf{x}_i^T \mathbf{x}_j \)
+- **Polynomial Kernel**: \( K(\mathbf{x}_i, \mathbf{x}_j) = (\mathbf{x}_i^T \mathbf{x}_j + c)^d \)
+- **RBF Kernel**: \( K(\mathbf{x}_i, \mathbf{x}_j) = \exp\left( -\frac{\|\mathbf{x}_i - \mathbf{x}_j\|^2}{2\sigma^2} \right) \)
+
+The decision function then becomes:
+
+$$
+ f(\mathbf{x}) = \text{sign}\left( \sum_{i=1}^n \alpha_i y_i K(\mathbf{x}_i, \mathbf{x}) + b \right)
+$$
+
+# 8. Conclusion
+
+In this document, we outlined the entire SVM optimization process, from the primal and dual formulations to the use of kernel functions for non-linear decision boundaries. The dot product \( \mathbf{x}_i^T \mathbf{x}_j \) plays a key role in determining the similarity between feature vectors, and the kernel trick allows SVM to efficiently find non-linear boundaries.
+
+The **SVM** is a powerful tool that provides robust classification by leveraging **support vectors** and ensuring maximum margin separation between classes.
