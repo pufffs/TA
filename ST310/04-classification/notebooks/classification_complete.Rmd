@@ -1,19 +1,18 @@
 ---
-title: "Classification"
-author: "Joshua Loftus"
-date: "`r Sys.Date()`"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_chunk$set(echo = TRUE)
 #library(tidyverse)
 library(dplyr )
 # install.packages("broom") # if necessary
 library(broom)
-# install.packages("yardstick") # if necessary
-#library(yardstick)
-install.packages("GGally")
+#install.packages("yardstick") # if necessary
+library(yardstick)
+#install.packages("GGally")
 library(GGally)
 ```
 
@@ -37,14 +36,16 @@ class_shift <- 2.5 # change this
 
 ```
 
-```{r}
-px
-```
 
+The |> operator is called the pipe operator. It allows you to pass the output of one function directly as the input to another function in a more readable and streamlined way. It is similar in functionality to the %>% operator.
+
+select(y, num_range("x.", 1:4)): select columns with names that contain the prefix "x." followed by a number within a specified range.
+
+Purpose of class_shift: control the balance of the classes. Larger shift leads to larger mu, then leads to higher proportion of positive class (class 1).
 ```{r message=FALSE}
 # Generating simulated data
 X <- matrix(rnorm(n*p), nrow = n)
-mu <- class_shift + X %*% true_beta
+mu <- class_shift + X %*% true_beta  #z = XW+b 
 px <- exp(mu)/(1+exp(mu))
 Y <- rbinom(n, 1, prob = px)
 train_ld <- data.frame(y = as.factor(Y), x = X)
@@ -65,7 +66,7 @@ train_ld |> count(y)
 
 ```{r}
 const_yhat_success <- mean(train_ld$y == 1)
-max(const_yhat_success, 1 - const_yhat_success)
+max(const_yhat_success, 1 - const_yhat_success) # this equals to 426/500=0.852, but only on training data, meaningless.
 ```
 
 
@@ -80,12 +81,17 @@ c(class_shift, true_beta)
 
 ```{r}
 fit_glm <- glm(y ~ ., family = binomial(), data = train_ld)
+fit_glm
 fit_glm |> ggcoef()
 ```
 
 Coefficients on the odds scale:
 
+The coefficients from the glm model are the coefficients of the logits, which is exponential of the odds. We can the exponential of the coefficients such that we can observe how they change odds. For example, $\beta_1=1.19$, this means we increase x1 by one unit, logits $\log(\frac{p}{1-p})$ will increase by 1.19. In the following coefficient for x1 is 3.29, which means we increase x1 by one unit, odds ratio will be 3.29 greater.
+
+
 ```{r}
+fit_glm <- glm(y ~ ., family = binomial(), data = train_ld)
 fit_glm |> 
   tidy(exponentiate = TRUE) |> knitr::kable()
 ```
@@ -94,7 +100,10 @@ fit_glm |>
 
 ```{r}
 fit_glm_predictions <- augment(fit_glm, type.predict = "response")
-fit_glm_predictions |> pull(.fitted) |> mean()
+fit_glm_predictions |> pull(.fitted) |> mean() #take out the column named .fitted and calculate the mean.
+```
+```{r}
+mean(fit_glm_predictions$.fitted)
 ```
 
 **Question**: Does this number look familiar? Why?
@@ -109,7 +118,7 @@ fit_glm_predictions |>
             event_level = "second") |>
   autoplot()
 ```
-
+ROC curve: TPR against FPR, consisting of choosing different levels of threshold. At (0,0), the threshold is 1, which means we choose all to be negative, hence TPR=FPR=0; At (1,1), the threshold is 0, which means we vote all positive, then TPR=FPR=1.
 
 **Note**: When a classification model outputs class probabilities or numeric scores these can be converted into classifications by setting thresholds or cutoffs. If we keep the model fixed but change the cutoff, we can achieve different trade-offs between false positives and false negatives (or specificity and sensitivity, precision and recall, etc--these are just other names). Plots like this `roc_curve` (see also `?pr_curve`) show all the possible trade-off values for one model.
 
@@ -151,7 +160,7 @@ confusion_matrix_higher |> autoplot(type = "heatmap")
 ```
 
 ```{r}
-confusion_matrix_lower |> autoplot(type = "heatmap")
+confusion_matrix_lower |> autoplot(type = "heatmap") #almost all predictions are positive
 ```
 
 Comparing across various metrics:
@@ -166,11 +175,12 @@ lower_summary <- summary(confusion_matrix_lower) |>
 cbind(higher_summary, lower_summary) |>
   knitr::kable()
 ```
+Accuracy benefits from a lower threshold, since the data is very imbalanced toward positive class. So a lower threshold will vote toward the positive class.
 
 Note the `accuracy`, for example, which is the proportion of data where the predicted class and true class are equal.
 
 ### Sub-sampling for class balance
-
+choose the number of positive samples to be the same as negative samples
 ```{r}
 rare_class_size <- min(table(train_ld$y))
 train_subsampled <- train_ld |>
@@ -188,6 +198,11 @@ cbind(
   tidy(fit_glm) |> select(term, estimate, std.error),
   tidy(fit_glm_subs) |> select(estimate, std.error)) |>
   knitr::kable()
+```
+
+```{r}
+fit_glm
+fit_glm_subs
 ```
 
 **Note**: With a smaller sample size, the balanced training data gives us larger `std.errors` for our estimates. (Wider confident intervals, larger p-values).
@@ -265,15 +280,14 @@ cbind(higher_subs_summary, lower_subs_summary) |>
   knitr::kable()
 ```
 
-**Question**: Suppose we have trained a model on data that was subsampled to create class balance. Then we choose classification cutoffs to achieve a desired trade-off between precision/recall (or false positives and false negatives), and we do this still while using the subsampled training data. What will happen if we start using that model to classify data from a new or full dataset that hasn't been subsampled?
-
+**Question**: Suppose we have trained a model on data that was subsampled to create class balance. Then we choose classification cutoffs to achieve a desired trade-off between precision/recall (or false positives and false negatives), and we do this still while using the subsampled training data. What will happen if we start using that model to classify data from a new or full dataset that hasn't been subsampled? 
 **Answer**: Predictions on imbalanced data will achieve a different trade-off between false positives and false negatives. To calibrate this we would need to choose a different classification threshold that works on imbalanced data.
 
+In a word: What if we train on a balanced dataset and predict on an imbalanced dataset?
+Answer: adjust the threshold according to the dominating class. If positive class dominates, increase the threshold; otherwise decrease the threshold. Or we can use some other metrics which are not so sensitive to the class imbalance, such as F1 score or balanced accuracy.
 
 
 # Logistic Regression
-
-**Logistic regression** is a popular statistical model used for binary classification problems. Unlike linear regression, which predicts a continuous value, logistic regression predicts a probability that a given instance belongs to one of two classes. This document provides a detailed mathematical overview of logistic regression.
 
 # 1. Sigmoid Function
 
@@ -286,12 +300,11 @@ $$
 where \( z \) is the linear combination of the input features:
 
 $$
-z = \mathbf{w}^T \mathbf{x} + b
+z = \mathbf{w}^T \mathbf{x}
 $$
 
 - \( \mathbf{w} \): Weights of the model.
 - \( \mathbf{x} \): Feature vector.
-- \( b \): Bias term.
 
 The output of the logistic function is a value between **0 and 1**, representing the predicted probability of the positive class.
 
@@ -300,7 +313,7 @@ The output of the logistic function is a value between **0 and 1**, representing
 The **log-odds** (or **logit**) is the logarithm of the odds of the positive class. In logistic regression, the log-odds is modeled as a linear function of the input features:
 
 $$
-\text{logit}(p) = \log\left( \frac{p}{1 - p} \right) = \mathbf{w}^T \mathbf{x} + b
+\text{logit}(p) = \log\left( \frac{p}{1 - p} \right) = \mathbf{w}^T \mathbf{x}
 $$
 
 where \( p \) is the predicted probability of the positive class.
@@ -310,13 +323,8 @@ where \( p \) is the predicted probability of the positive class.
 The goal of logistic regression is to find the optimal parameters (weights and bias) that minimize the prediction error. Instead of using **Mean Squared Error**, logistic regression uses the **logistic loss** or **cross-entropy loss** function, which is defined as:
 
 $$
-J(\mathbf{w}, b) = -\frac{1}{m} \sum_{i=1}^m \left[ y^{(i)} \log(\hat{y}^{(i)}) + (1 - y^{(i)}) \log(1 - \hat{y}^{(i)}) \right]
+C(\mathbf{w}) = -\frac{1}{m} \sum_{i=1}^m \left[ y^{(i)} \log(\hat{y}^{(i)}) + (1 - y^{(i)}) \log(1 - \hat{y}^{(i)}) \right]
 $$
-
-where:
-- \( m \): Number of training examples.
-- \( y^{(i)} \): True label of the \( i \)-th training example.
-- \( \hat{y}^{(i)} = \sigma(\mathbf{w}^T \mathbf{x}^{(i)} + b) \): Predicted probability for the \( i \)-th example.
 
 The cost function represents the **negative log-likelihood** of the data given the model parameters.
 
@@ -325,16 +333,25 @@ The cost function represents the **negative log-likelihood** of the data given t
 To estimate the parameters, we use **Maximum Likelihood Estimation (MLE)**. The likelihood function for logistic regression is:
 
 $$
-L(\mathbf{w}, b) = \prod_{i=1}^m \left( \hat{y}^{(i)} \right)^{y^{(i)}} \left( 1 - \hat{y}^{(i)} \right)^{1 - y^{(i)}}
+L(\mathbf{w}) = \prod_{i=1}^m \left( \hat{y}^{(i)} \right)^{y^{(i)}} \left( 1 - \hat{y}^{(i)} \right)^{1 - y^{(i)}}
 $$
 
 The **log-likelihood** is obtained by taking the logarithm of the likelihood function:
 
 $$
-\ell(\mathbf{w}, b) = \sum_{i=1}^m \left[ y^{(i)} \log(\hat{y}^{(i)}) + (1 - y^{(i)}) \log(1 - \hat{y}^{(i)}) \right]
+\ell(\mathbf{w}) = \sum_{i=1}^m \left[ y^{(i)} \log(\hat{y}^{(i)}) + (1 - y^{(i)}) \log(1 - \hat{y}^{(i)}) \right]
 $$
 
 The **negative log-likelihood** is equivalent to the cost function, which we aim to minimize.
+ 
+Question: why there may be problems for logistic regression in a well-classified data?
+
+the log-likelihood function is maximized when the predicted probabilities approach 0 or 1 for all data points, which is only possible if the coefficients approach infinity. Have a look at the log-likelihood function, it is maximized either when $\hat y=0$ or $\hat y=1$. The predicted probability is 
+$$
+P(\hat y =1) =\frac{1}{1 + e^{-(\mathbf{w}^T \mathbf{x})}}
+$$
+Hence to maximize the log-likelihood, the optimization process will drive $P(\hat y =1)$ to be 0 or 1. And this will drive $\mathbf{w}$ to be negative or positive infinity.
+
 
 # 5. Gradient Descent
 
@@ -344,39 +361,28 @@ The **negative log-likelihood** is equivalent to the cost function, which we aim
 2. **Compute Predictions**: For each training example, compute the predicted probability:
    
    $$
-   \hat{y}^{(i)} = \sigma(\mathbf{w}^T \mathbf{x}^{(i)} + b)
+   \hat{y}^{(i)} = \sigma(\mathbf{w}^T \mathbf{x}^{(i)})
    $$
 
-3. **Compute Cost**: Calculate the cost function \( J(\mathbf{w}, b) \).
+3. **Compute Cost**: Calculate the cost function \( C(\mathbf{w}) \).
 4. **Compute Gradients**: Calculate the gradients of the cost function with respect to the weights and bias:
    
    - For the weights \( \mathbf{w} \):
 
      $$
-     \frac{\partial J(\mathbf{w}, b)}{\partial w_j} = \frac{1}{m} \sum_{i=1}^m \left( \hat{y}^{(i)} - y^{(i)} \right) x_j^{(i)}, \quad \text{for } j = 1, 2, \dots, n
-     $$
-
-   - For the bias \( b \):
-
-     $$
-     \frac{\partial J(\mathbf{w}, b)}{\partial b} = \frac{1}{m} \sum_{i=1}^m \left( \hat{y}^{(i)} - y^{(i)} \right)
+     \frac{\partial C(\mathbf{w})}{\partial w_j} = \frac{1}{m} \sum_{i=1}^m \left( \hat{y}^{(i)} - y^{(i)} \right) x_j^{(i)}, \quad \text{for } j = 1, 2, \dots, n
      $$
 
 5. **Update Parameters**: Update the weights and bias using a learning rate \( \alpha \):
 
    $$
-   \mathbf{w} := \mathbf{w} - \alpha \frac{\partial J(\mathbf{w}, b)}{\partial \mathbf{w}}
+   \mathbf{w} := \mathbf{w} - \alpha \frac{\partial C(\mathbf{w})}{\partial \mathbf{w}}
    $$
-
-   $$
-   b := b - \alpha \frac{\partial J(\mathbf{w}, b)}{\partial b}
-   $$
-
 6. **Repeat**: Repeat steps 2-5 until the cost function converges to a minimum.
 
 # 6. Hessian Matrix and Newton's Method
 
-An alternative optimization method is **Newton's Method**, which uses the **Hessian matrix** (second-order derivatives) to find the minimum of the cost function. The **Hessian matrix** for logistic regression is given by:
+An alternative optimization method is **Newton's Method**, which uses the **Hessian matrix** to find the minimum of the cost function. The **Hessian matrix** for logistic regression is given by:
 
 $$
 H = \frac{1}{m} \sum_{i=1}^m \hat{y}^{(i)} (1 - \hat{y}^{(i)}) \mathbf{x}^{(i)} \mathbf{x}^{(i)T}
@@ -390,42 +396,35 @@ $$
 
 where \( \theta = [\mathbf{w}, b] \) is the vector of parameters, and \( \nabla J(\theta) \) is the gradient of the cost function.
 
-# 7. Probabilistic Interpretation
-
-Logistic regression can be interpreted as a **probabilistic model**. The predicted probability \( \hat{y} \) represents the conditional probability of the positive class given the input features:
-
-$$
-P(y = 1 \mid \mathbf{x}) = \sigma(\mathbf{w}^T \mathbf{x} + b)
-$$
-Concern of logistic regression: the log-likelihood function is maximized when the predicted probabilities approach 0 or 1 for all data points, which is only possible if the coefficients approach infinity. Have a look at the log-likelihood function, it is maximized either when $\hat y=0$ or $\hat y=1$. The predicted probability is 
-$$
-P(\hat y =1) =\frac{1}{1 + e^{-(\mathbf{w}^T \mathbf{x} + b)}}
-$$
-Hence to maximize the log-likelihood, the optimization process will drive $P(\hat y =1)$ to be 0 or 1. And this will drive $\mathbf{w}$ to be negative or positive infinity.
-
 
 
 
 # SVM
-The primal optimization problem for SVM aims to find a weight vector (**w**) and bias (**b**) that maximize the margin between classes while correctly classifying all training points.
-
-The primal problem can be expressed as follows:
-
+The primal optimization problem for SVM aims to find a weight vector (**w**) and bias (**b**) that maximize the margin between classes while correctly classifying all training points. The problem is to optimize:
 $$
-\min_{\mathbf{w}, b} \quad \frac{1}{2} \|\mathbf{w}\|^2
+\max_{\mathbf{w}, b} [\min_{i} \frac{\mathbf{w}^Tx_i+b}{||\mathbf{w}||}],~~s.t~~~y_i(\mathbf{w}^Tx_i+b)>0
 $$
 
-Subject to:
+Now let $$M = \min_{i} \frac{\mathbf{w}^Tx_i+b}{||\mathbf{w}||}$$ be the margin
+the optimization becomes 
+$$
+\max_{\mathbf{w}, b,M} M, ~~~s.t~ \frac{y_i(\mathbf{w}^Tx_i+b)}{||\mathbf{w}||}\geq M
+$$
+The max operator means we still want to maximize the margin, and the constraint means we want the normalized distance to the hyperplane to be greater than the margin for all points, which is our purpose. Since we can always scale the parameters ${\mathbf{w},b}$ such that hyperplane's position does not change. Hence, w.l.o.g, we can scale such that
+$$
+||\mathbf{w}||M=1~~\rightarrow~~~M=\frac{1}{||\mathbf{w}||}
+$$
+Intuitively, this means we draw two hyperplanes parallel to our boundry, with unnormalized distance 1. And we want all the points to be outside the two hyperplanes such that they can be correctly classified, while maximize the the normalized distance (margin).
+
+Then the optimization becomes 
+$$
+\max_{\mathbf{w}} \frac{1}{||\mathbf{w}||}, ~~s.t~~~y_i(\mathbf{w}^Tx_i+b) \geq 1
+$$
+which is then equivalent to
 
 $$
-y_i (\mathbf{w}^T \mathbf{x}_i + b) \geq 1, \quad \forall i
+\min_{\mathbf{w}} \quad \frac{1}{2} \|\mathbf{w}\|^2,~~s.t~~~ y_i (\mathbf{w}^T \mathbf{x}_i + b) \geq 1
 $$
-
-Where:
-- \( \mathbf{w} \) is the weight vector.
-- \( b \) is the bias.
-- \( y_i \in \{+1, -1\} \) are the class labels.
-- \( \mathbf{x}_i \) are the feature vectors of the training data points.
 
 # 2. Lagrangian Formulation and KKT Conditions
 
@@ -435,14 +434,30 @@ $$
 L_P(\mathbf{w}, b, \boldsymbol{\alpha}) = \frac{1}{2} \|\mathbf{w}\|^2 - \sum_{i=1}^n \alpha_i \left[ y_i (\mathbf{w}^T \mathbf{x}_i + b) - 1 \right]
 $$
 
+
 The **Karush-Kuhn-Tucker (KKT) conditions** are used to find the optimal solution. These include:
 
 1. **Stationarity**: \( \nabla_{\mathbf{w}} L_P = 0 \) and \( \nabla_b L_P = 0 \).
    - This gives the optimal weight vector:
-     
-     $$
-     \mathbf{w} = \sum_{i=1}^n \alpha_i y_i \mathbf{x}_i
-     $$
+   $$
+\nabla_{\mathbf{w}} L_P = \mathbf{w} - \sum_{i=1}^n \alpha_i y_i \mathbf{x}_i = 0
+$$
+
+Solving for \( \mathbf{w} \):
+
+$$
+\mathbf{w} = \sum_{i=1}^n \alpha_i y_i \mathbf{x}_i
+$$
+
+$$
+\nabla_{b} L_P = -\sum_{i=1}^n \alpha_i y_i = 0
+$$
+
+This implies:
+
+$$
+\sum_{i=1}^n \alpha_i y_i = 0
+$$
 
 2. **Primal Feasibility**: The original constraints must hold for each training point.
 3. **Dual Feasibility**: \( \alpha_i \geq 0 \).
@@ -508,9 +523,3 @@ The decision function then becomes:
 $$
  f(\mathbf{x}) = \text{sign}\left( \sum_{i=1}^n \alpha_i y_i K(\mathbf{x}_i, \mathbf{x}) + b \right)
 $$
-
-# 8. Conclusion
-
-In this document, we outlined the entire SVM optimization process, from the primal and dual formulations to the use of kernel functions for non-linear decision boundaries. The dot product \( \mathbf{x}_i^T \mathbf{x}_j \) plays a key role in determining the similarity between feature vectors, and the kernel trick allows SVM to efficiently find non-linear boundaries.
-
-The **SVM** is a powerful tool that provides robust classification by leveraging **support vectors** and ensuring maximum margin separation between classes.
