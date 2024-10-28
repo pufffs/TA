@@ -12,6 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 theme_set(theme_minimal(base_size = 12))
 ```
+# First part: Gradient descent and it numerical approximation
 
 ## Introduction
 
@@ -23,7 +24,10 @@ The final section of this notebook shows a more sophisticated implementation of 
 
 ## Gradient descent basics
 
-We can think of this iterative optimization algorithm as minimizing a function by taking steps in the direction of the steepest decrease (or descent). The path followed by the algorithm is like someone skiiing downhill as fast as possible by always turning in the direction with the steepest downward slope. Here's a simple example using the function $f(x) = x^4$. This starts at the point $x_0 = 1$, and then computes a sequence of inputs $x_1, x_2, \ldots, x_n$ with the goal that $f(x_n)$ converges to a (potentially **local**!) minimum of $f$. In this case $f$ has a global minimum at $x = 0$ of $f(0) = 0$, and we hope our algorithm will give this correct answer.
+We can think of this iterative optimization algorithm as minimizing a function by taking steps in the direction of the steepest decrease (or descent). The path followed by the algorithm is like someone skiiing downhill as fast as possible by always turning in the direction with the steepest downward slope. Here's a simple example using the function $f(x) = x^4$. This starts at the point $x_0 = 1$, and then computes a sequence of inputs $x_1, x_2, \ldots, x_n$ with the goal that $f(x_n)$ converges to a (potentially **local**!) minimum of $f$. In this case $f$ has a global minimum at $x = 0$ of $f(0) = 0$, and we hope our algorithm will give this correct answer. We treat $x$ as the parameter and $f(x)$ as the loss function here.
+$$
+x_{new} = x_{old} - \eta\left.\frac{\partial f(x)}{\partial x}\right\vert_{x_{old}}
+$$
 
 ```{r}
 # Function to minimize
@@ -219,8 +223,10 @@ We'll now create a version with adaptive step sizes and numeric differentiation,
 
 This is the function we want to minimize to fit a logistic regression model. This is a special case of [maximum likelihood estimation](https://en.wikipedia.org/wiki/Maximum_likelihood_estimation), which could also be applied to any other `glm` (or parametric probability model).
 
-Since gradient descent *minimizes*, we apply it to the negative of the log-likelihood in order to *maximize* the log-likelihood.
-
+Since gradient descent *minimizes*, we apply it to the negative of the log-likelihood in order to *maximize* the log-likelihood.The cost function is:
+$$
+C(\beta) = -\sum_{i=1}^n \left[ y_i \log\left( \frac{1}{1 + e^{-x_i \beta}} \right) + (1 - y_i) \log\left( 1 - \frac{1}{1 + e^{-x_i \beta}} \right) \right]
+$$
 ```{r}
 # See e.g. lecture slides 
 neglogL <- function(X, Y, beta) {
@@ -250,12 +256,14 @@ numeric_grad <- function(X, Y, beta, h = 1e-06) {
   # Approximate each coordinate of the gradient
   numerator <- sapply(1:length(beta), function(j) {
     H <- rep(0, length(beta))
-    H[j] <- h # step in coordinate j
+    H[j] <- h # step in each coordinate j
     neglogL(X, Y, beta + H) - neglogL(X, Y, beta - H)
   })
   numerator / (2*h)
 }
 ```
+sapply(v, function): apply the function on each element of the vector V.
+
 
 ### Adaptive step sizes
 
@@ -299,7 +307,7 @@ max_steps <- 50 # try ~3 for comparison
 beta_prev2 <- rnorm(ncol(X)) # random start
 #beta_prev2 <- c(mean(Y), cor(X[,-1], Y)) # "warm" start
 grad_prev2 <- numeric_grad(X, Y, beta_prev2)
-beta_prev1 <- beta_prev2 + 0.1 * grad_prev2 / sqrt(sum(grad_prev2^2))
+beta_prev1 <- beta_prev2 + 0.1 * grad_prev2 / sqrt(sum(grad_prev2^2)) #some ascending update
 grad_prev1 <- numeric_grad(X, Y, beta_prev1)
 previous_loss <- neglogL(X, Y, beta_prev2)
 next_loss <- neglogL(X, Y, beta_prev1)
@@ -319,17 +327,21 @@ beta_path <- data.frame(step = 0:max_steps,
 ```
 
 Repeat until convergence:
-
+Recall the BB method is defined as:
+$$
+\gamma_n=\frac{|(\mathbf{\beta_n}- \mathbf{\beta_{n-1}})^T[\nabla F(\mathbf{\beta_n})-\nabla F(\mathbf{\beta_{n-1}})]|}{||\nabla F(\mathbf{\beta_n})-\nabla F(\mathbf{\beta_{n-1}})||^2}
+$$
+The numerator is an inner product of two vectors, it equals to the component-wise product of the two vectors and take the sum; The denominator is the square of the L2norm, which equals to square the vector and sum.
 ```{r}
-tol <- 1e-5 # (error) tolerance
+tol <- 1e-5
 while (abs(previous_loss - next_loss) > tol) {
   # Compute BB step size
   grad_diff <- grad_prev1 - grad_prev2
   step_BB <- abs(sum((beta_prev1 - beta_prev2) * grad_diff)) / sum(grad_diff^2)
-  beta_prev2 <- beta_prev1
+  beta_prev2 <- beta_prev1 # for the (n+1)-th step, beta_{n} becomes beta_{n-1}
   
   # Update step
-  beta_prev1 <- beta_prev1 - step_BB * grad_prev1
+  beta_prev1 <- beta_prev1 - step_BB * grad_prev1 # update the newest parameter
   
   # Shift previous steps
   grad_prev2 <- grad_prev1
@@ -337,8 +349,16 @@ while (abs(previous_loss - next_loss) > tol) {
   previous_loss <- next_loss
   next_loss <- neglogL(X, Y, beta_prev1)
   
+  # Print beta values and loss for the first 5 steps
+  if (steps <= 5) {
+    cat("Step ", steps, ":\n")
+    cat("Beta_prev2: ", beta_prev2, "\n")
+    cat("Beta_prev1: ", beta_prev1, "\n")
+    cat("Loss: ", next_loss, "\n\n")
+  }
+  
   # Print loss every 5 steps, track path, control loop
-  if (round(steps/5) == steps/5) print(previous_loss)
+  if (round(steps / 5) == steps / 5) print(previous_loss)
   steps <- steps + 1
   beta_path[steps, 2] <- next_loss
   beta_path[steps, 3:ncol(beta_path)] <- beta_prev1
@@ -355,22 +375,20 @@ steps - 1 # not counting starting point
 #### Did it work?
 
 The plot below compares the estimate from our gradient descent implementation to the estimate from the `glm()` function (hollow squares and diamonds, should be almost identical), and also displays the true coefficients (solid points).
-
-```{r echo=FALSE}
+```{r}
 beta_plot_df <- data.frame(
-  coordinate = 0:p,
+  coordinate = 1:11,
   beta = c(true_beta, fit_glm |> coef(), beta_prev1),
   type = c(rep("true beta", p+1), rep("est: glm()", p+1), rep("est: grad. desc.", p+1)))
+
 beta_plot_df |>
   filter(type != "true beta") |>
-    ggplot(aes(coordinate,
-               beta,
-               color = type)) +
-  geom_point(alpha = .8, size = 2, stroke = 1,
-              aes(shape = type)) +
+  ggplot(aes(coordinate, beta, color = type)) +
+  geom_point(alpha = .8, size = 2, stroke = 1, aes(shape = type)) +
   scale_shape_manual(values = c(0, 5)) +
-  geom_point(size = 1.8, color = "black", alpha = .9,
-    data = beta_plot_df |> filter(type == "true beta")) + scale_color_viridis_d(begin = .1, end = .9, direction = 1)
+  geom_point(size = 1.8, color = "black", alpha = .9, data = beta_plot_df |> filter(type == "true beta")) +
+  scale_color_viridis_d(begin = .1, end = .9, direction = 1) +
+  scale_x_continuous(breaks = 1:11)
 ```
 
 #### Coefficient paths
@@ -434,16 +452,407 @@ data.frame(step = 1:length(distances),
 
 **Answer**: Only the `neglogL` function! We could optimize many functions (and therefore fit many models with MLE) with almost the same code.
 
-### Some takeaways
+Concerns: Although finite difference looks good here, but it is usually not popular in machine learning, for some reasons:
+1. Finite difference approximations are prone to numerical errors. The calculation involves subtracting two similar values, which can lead to catastrophic cancellation—a significant loss of precision in floating-point arithmetic.
+2. For each dimension of vector β, you need two function evaluations, for high-dimensional parameter spaces, this results in a high computational cost, making it impractical for large-scale problems.
+3. The quality of the gradient approximation heavily depends on the choice of the step size h. Finding an appropriate step size is often problem-dependent and can require trial and error.
 
-- Gradient descent can be implemented to converge to a **local** minimum of a function, provided the function is not badly behaved (e.g. discontinuous)
+# Second part: Stochastic gradient descent
 
-- Many functions that we optimize in statistics and machine learning are [convex](https://en.wikipedia.org/wiki/Convex_function), in which case any minimizer is a global minimizer.
+### Simulate high-dimensional data
 
-- In non-convex optimization we have to be more careful about whether gradient descent converges to "bad" optimum values, i.e. ones which are locally optimal but far from globally optimal. This is a common concern in AI/deep networks.
+Generate data from a high-dimensional model. After your implementation is finished, you can come back here to experiment and see how the algorithm's performance depends on these values. (One interesting experiment: reduce `lambda` in `rpois` to have a sparser `beta` and see how the results change).
 
-- Convergence usually requires step sizes that decrease to zero. We can use an adaptive step size method or experiment with various approaches by hand.
+```{r}
+set.seed(1) # comment/uncomment/change this
+n <- 100
+p <- 400
+X <- matrix(rnorm(n*p), nrow = n)
+beta <- rpois(p, lambda = 1.5)
+SGD_starting_beta <- rnorm(p) # generate once
+#beta <- sample(c(-1, 0, 0, 1), p, replace = TRUE)
+sigma <- 2
+y <- X %*% beta + rnorm(n, sd = sigma)
+# sparsity level
+sum(beta != 0)
+```
 
-- We can compute gradients either by having some closed form expression or using numeric approximation.
+**Question**: Can we fit OLS to estimate beta? Why or why not?
 
-- We can stop the algorithm after some number of steps and/or check for convergence by seeing if the objective function's value is changing by amounts small enough to be numerically insignificant.
+**Answer**: No. Since there are more predictors than observations, i.e. $p > n$, we cannot fit OLS. (The matrix $X^TX$ is not invertible)
+
+### Implement stochastic gradient descent
+
+#### Helper functions
+
+```{r}
+# Loss function
+least_squares_loss <- function(x, y, beta) {
+  residuals <- y - x %*% beta
+  sum(residuals^2)
+}
+```
+
+$$
+L(\beta) = ||y - X \beta||^2
+$$
+$$
+\nabla L(\beta) = -2 X^T (y - X \beta)
+$$
+```{r}
+# Gradient of the loss function
+least_squares_gradient <- function(x, y, beta) {
+  residuals <- y - x %*% beta
+  -2 * t(x) %*% residuals
+}
+```
+
+#### Mini-batch example
+$$
+   \nabla L_{SGD}(\beta) = -\frac{1}{m} \sum_{i=1}^m X_i (y_i - X_i^T \beta)
+   $$
+$$
+   \beta \leftarrow \beta - \eta \nabla L_{\text{mini-batch}}(\beta)
+   $$
+Computing gradient on a subset of the sample:
+
+```{r}
+batch_size <- 10
+batch_indices <- sample(1:nrow(X), batch_size)
+X_batch <- X[batch_indices, , drop = FALSE]
+y_batch <- y[batch_indices]
+gradient_batch <- least_squares_gradient(X_batch, y_batch, SGD_starting_beta)
+dim(X_batch)
+length(y_batch)
+dim(gradient_batch)
+```
+
+#### SGD: main loop
+
+Modify the code below to complete your implementation.
+
+In this implementation, normalize the gradient to make it a unit vector before taking a step. Recall that if `v` is vector, then `u <- v / sqrt(sum(v^2))` is a unit vector in the direction of `v`. (Optional: for numerical stability you could also add a small positive number in the denominator like `1e-8`).
+
+```{r}
+epochs <- 40 # decrease for early stopping?
+batch_size <- 8 # for batch SGD
+gamma <- 0.9
+beta_hat <- SGD_starting_beta # generated once above
+#beta_hat <- rnorm(p) # random start
+num_batches <- ceiling(n/batch_size)
+steps <- epochs * num_batches
+SGD_path <- data.frame(step = 1:steps,
+                       epoch = numeric(steps),
+                       gamma = numeric(steps),
+                       loss = numeric(steps),
+                       MSE = numeric(steps),
+                       beta_hat_norm = numeric(steps),
+                       gradient_norm = numeric(steps))
+start_time <- Sys.time()
+step <- 1
+for (epoch in 1:epochs) {
+  # Pass over sample in a random order each time
+  shuffled_indices <- sample(1:n, n, replace = TRUE)
+  
+  for (batch in 1:num_batches) {
+    batch_start <- 1 + batch_size * (batch - 1)
+    batch_end <- min(batch_size * batch, nrow(X))
+    batch_indices <- shuffled_indices[batch_start:batch_end]
+   # Mini-batch
+    X_batch <- X[batch_indices, , drop = FALSE]
+    y_batch <- y[batch_indices]
+    # Update beta_hat
+   gradient_batch <- least_squares_gradient(X_batch, y_batch, beta_hat)
+   gradient_norm <- sqrt(sum(gradient_batch^2))
+   beta_hat <- beta_hat - gamma^epoch * gradient_batch / (1e-8 + gradient_norm)
+   LS_loss <- least_squares_loss(X, y, beta_hat)
+
+  # Store algorithm path information
+  SGD_path[step, ] <- c(step,
+                        epoch,
+                        gamma^epoch,
+                        LS_loss,
+                        mean((beta_hat - beta)^2),
+                        sqrt(sum(beta_hat^2)),
+                        gradient_norm)
+  step <- step + 1
+  }
+}
+
+print(Sys.time() - start_time)
+```
+Epoch: An epoch is one complete pass through the entire training dataset.
+iteration: An iteration refers to one update of the model's parameters.
+Example: If your dataset has 1,000 samples and your batch size is 100, it will take 10 iterations to complete one epoch.
+
+## Plots by **epoch**
+
+(Averaged over all batches in that epoch)
+
+Note: the `loss` is plotted on a logarithmic scale so that large initial changes don't obscure later variation.
+
+```{r echo = FALSE, fig.align='center'}
+SGD_epoch <- SGD_path |>
+  select(-step) |>
+  group_by(epoch) |>
+  summarize(across(where(is.numeric), mean))
+SGD_epoch |>
+  ggplot(aes(epoch, gamma)) + geom_point() +
+  ylab("gamma^epoch")
+SGD_epoch |>
+  ggplot(aes(epoch, loss)) + geom_point() +
+  ylab("Loss") + scale_y_log10()
+SGD_epoch |>
+  ggplot(aes(epoch, MSE)) + geom_point() +
+  ylab("MSE(beta_hat)")
+SGD_epoch |>
+  ggplot(aes(epoch, beta_hat_norm)) + geom_point() +
+  ylab("norm(beta_hat)")
+SGD_epoch |>
+  ggplot(aes(epoch, gradient_norm)) + geom_point() +
+  ylab("norm(gradient)")
+```
+
+**Question**: Does the MSE of beta_hat level off? After roughly how many epochs? Is this happening because `gamma` decreased too fast?
+
+**Answer**: Yes, in this example after roughly 20 epochs, and no because the `gamma` value is still over 0.1 (has not yet become numerically very close to zero).
+
+## Plots by **mini-batch**
+We have 100 samples, batch size is 8, so there are 13 iterations per epoch. We have 40 epoches, the total number of iterations is 520.
+
+```{r echo = FALSE, fig.align='center'}
+SGD_path |>
+  ggplot(aes(step, gamma)) + geom_point() +
+  ylab("gamma^epoch")
+SGD_path |>
+  ggplot(aes(step, loss)) + geom_point() +
+  ylab("Loss") + scale_y_log10()
+SGD_path |>
+  ggplot(aes(step, MSE)) + geom_point() +
+  ylab("MSE(beta_hat)")
+SGD_path |>
+  ggplot(aes(step, beta_hat_norm)) + geom_point() +
+  ylab("norm(beta_hat)")
+SGD_path |>
+  ggplot(aes(step, gradient_norm)) + geom_point() +
+  ylab("norm(gradient)")
+```
+
+## Squared errors
+
+Has the algorithm pulled more of the squared errors closer to zero compared to the (random) initial starting point?
+
+```{r echo=FALSE}
+data.frame(
+  coordinate = c(1:p, 1:p),
+  estimate = c(rep("initial", p), rep("final", p)),
+  error = c(beta - SGD_starting_beta, beta - beta_hat)
+) |>
+  ggplot(aes(error^2, fill = estimate)) +
+  geom_density(alpha = .7) +
+  scale_fill_viridis_d()
+```
+
+Compute the (Euclidean) distances between the following points:
+
+```{r}
+# From algorithm starting point to end point
+sqrt(sum((beta_hat - SGD_starting_beta)^2))
+# From starting point to true beta
+sqrt(sum((beta - SGD_starting_beta)^2))
+# From end point to true beta
+sqrt(sum((beta - beta_hat)^2))
+```
+
+**Question**: Does SGD do better than a random guess (the starting point) at estimating the true coefficients?
+
+**Answer**: Yes, after taking some steps the algorithm has reduced the MSE of estimating the true beta.
+
+### Exercise: Please implement the stochastic gradient descent procedure on logistic regression.
+$$
+L_{SGD}(\mathbf{\beta}) = -\frac{1}{m} \sum_{i=1}^m \left[ y_i \log(\hat{y}_i) + (1 - y_i \log(1 - \hat{y}_i) \right]
+$$
+ $$
+   \hat{y}_i = \sigma(\beta^T \mathbf{x}_i) = \frac{1}{1 + e^{-\beta^T \mathbf{x}_i}}
+$$
+
+$$
+\frac{d\sigma(z)}{dz}=\sigma(z)(1-\sigma(z))
+$$
+Hence 
+$$
+\frac{\partial \hat y_i}{\partial \beta}=\frac{\partial \sigma(\beta^Tx_i)}{\partial \beta}=\sigma(\beta^Tx_i)(1-\sigma(\beta^Tx_i))x_i=\hat{y}_i(1-\hat{y}_i)x_i
+$$
+Substitute back to the loss function:
+$$
+\frac{\partial L_{SGD}(\mathbf{\beta})}{\partial \beta}=-\frac{1}{m}\sum^m_{i=1}\big[ y_i(1-\hat y_i)x_i - (1-y_i)\hat y_ix_i \big]=-\frac{1}{m}\sum^m_{i=1}(y_i-\hat y_i)x_i
+$$
+##### 1. Data generation
+```{r}
+set.seed(123) 
+
+n <- 500
+
+feature1_class0 <- rnorm(n, mean = 2, sd = 1)
+
+feature2_class0 <- rnorm(n, mean = 2, sd = 1)
+
+feature1_class1 <- rnorm(n, mean = 4, sd = 1)
+
+feature2_class1 <- rnorm(n, mean = 4, sd = 1)
+
+data_class0 <- data.frame(
+  Feature1 = feature1_class0,
+  Feature2 = feature2_class0,
+  Class = 0
+)
+
+data_class1 <- data.frame(
+  Feature1 = feature1_class1,
+  Feature2 = feature2_class1,
+  Class = 1
+)
+
+
+data <- rbind(data_class0, data_class1)
+
+data <- data[sample(nrow(data)), ]
+ggplot(data, aes(x = Feature1, y = Feature2, color = factor(Class))) +
+  geom_point(alpha = 0.7) +
+  labs(title = "Simulated Binary Classification Dataset",
+       x = "Feature 1",
+       y = "Feature 2",
+       color = "Class") +
+  theme_minimal()
+
+```
+
+##### 2. Train-Test split
+
+
+```{r}
+train_proportion <- 0.8
+train_indices <- sample(1:nrow(data), size = train_proportion * nrow(data))
+
+# Create training and testing sets
+train_data <- data[train_indices, ]
+test_data <- data[-train_indices, ]
+```
+
+```{r}
+
+```
+
+##### 3. Model training
+```{r}
+batch_size = 32
+
+sigmoid <- function(z) {
+  1 / (1 + exp(-z))
+}
+
+BCE_loss <- function(y_true, y_pred) {
+  #TO DO
+}
+
+logistic_gradient <- function(y_true, y_pred, X){
+  #TO DO
+}
+
+sgd_logistic_regression <- function(train_data, lr = 0.01, epochs = 100) {
+  X <- as.matrix(train_data[, c("Feature1", "Feature2")])
+  y <- train_data$Class
+  
+  # Add intercept term
+  X <- cbind(Intercept = 1, X)
+  
+  # Initialize weights
+  beta_hat <- rep(0, ncol(X))
+  
+  n <- nrow(X)
+  
+  loss_history <- numeric(epochs)
+  
+  num_batches <- ceiling(n/batch_size)
+  
+  for (epoch in 1:epochs) {
+    shuffled_indices <- sample(1:n, n, replace = TRUE)
+    
+    for (batch in 1:num_batches) {
+    batch_start <- 1 + batch_size * (batch - 1)
+    batch_end <- min(batch_size * batch, n)
+    batch_indices <- shuffled_indices[batch_start:batch_end]
+   # Mini-batch
+    X_batch <- X[batch_indices, , drop = FALSE]
+    y_batch <- y[batch_indices]
+    # Update beta_hat
+    z_batch <- X_batch %*% beta_hat
+    y_pred <- sigmoid(z_batch)
+    
+   gradient_batch <- logistic_gradient(y_batch, y_pred, X_batch)
+   gradient_norm <- sqrt(sum(gradient_batch^2))
+   
+   beta_hat <- beta_hat - lr^epoch * gradient_batch / (1e-8 + gradient_norm)
+   entropy_loss <- BCE_loss(y_batch, y_pred)
+   
+  }
+
+    z_all <- X %*% weights
+    y_hat_all <- sigmoid(z_all)
+    loss <- compute_loss(y, y_hat_all)
+    loss_history[epoch] <- loss
+
+    if (epoch %% 10 == 0 || epoch == 1) {
+      cat("Epoch:", epoch, "- Loss:", round(loss, 4), "\n")
+    }
+  }
+  
+  return(list(weights = weights, loss_history = loss_history))
+}
+
+# Train the model
+result <- sgd_logistic_regression(train_data, learning_rate = 0.1, epochs = 100)
+final_weights <- result$weights
+loss_history <- result$loss_history
+
+# Display final weights
+cat("Final Weights:\n")
+print(final_weights)
+
+```
+
+
+##### 4. Evaluation on test set
+```{r}
+
+# Extract testing features and labels
+X_test <- as.matrix(test_data[, c("Feature1", "Feature2")])
+y_test <- test_data$Class
+
+# Add intercept term
+X_test <- cbind(Intercept = 1, X_test)
+
+# Compute predictions
+z_test <- X_test %*% final_weights
+y_hat_test <- sigmoid(z_test)
+predictions_test <- ifelse(y_hat_test >= 0.5, 1, 0)
+
+# Calculate accuracy
+accuracy_test <- mean(predictions_test == y_test)
+
+ggplot(test_data, aes(x = Feature1, y = Feature2, color = factor(Class))) +
+  geom_point(alpha = 0.7) +
+  # Add the decision boundary using a separate data frame
+  geom_line(data = data.frame(Feature1 = x1_vals, Feature2 = x2_vals), 
+            aes(x = Feature1, y = Feature2), 
+            color = "black", size = 1) +
+  labs(title = "Decision Boundary on Testing Data",
+       x = "Feature 1",
+       y = "Feature 2",
+       color = "Class") +
+  theme_minimal()
+
+
+
+```
+
