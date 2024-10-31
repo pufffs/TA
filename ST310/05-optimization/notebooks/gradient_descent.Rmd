@@ -1,11 +1,3 @@
----
-title: "Gradient descent"
-author: "Joshua Loftus"
-date: "`r Sys.Date()`"
-output:
-  html_document: default
-  pdf_document: default
----
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -512,7 +504,7 @@ $$
    \nabla L_{SGD}(\beta) = -\frac{1}{m} \sum_{i=1}^m X_i (y_i - X_i^T \beta)
    $$
 $$
-   \beta \leftarrow \beta - \eta \nabla L_{\text{mini-batch}}(\beta)
+   \beta \leftarrow \beta - \eta \nabla L_{\text{SGD}}(\beta)
    $$
 Computing gradient on a subset of the sample:
 
@@ -668,9 +660,10 @@ sqrt(sum((beta - beta_hat)^2))
 
 **Answer**: Yes, after taking some steps the algorithm has reduced the MSE of estimating the true beta.
 
-### Exercise: Please implement the stochastic gradient descent procedure on logistic regression.
+###### Exercise: Please implement the stochastic gradient descent procedure on logistic regression using the following simulated data. You will need to complete the model training part by filling in the #TO DO part in the code.
+
 $$
-L_{SGD}(\mathbf{\beta}) = -\frac{1}{m} \sum_{i=1}^m \left[ y_i \log(\hat{y}_i) + (1 - y_i \log(1 - \hat{y}_i) \right]
+L_{SGD}(\mathbf{\beta}) = -\frac{1}{m} \sum_{i=1}^m \left[ y_i \log(\hat{y}_i) + (1 - y_i) \log(1 - \hat{y}_i) \right]
 $$
  $$
    \hat{y}_i = \sigma(\beta^T \mathbf{x}_i) = \frac{1}{1 + e^{-\beta^T \mathbf{x}_i}}
@@ -693,14 +686,15 @@ set.seed(123)
 
 n <- 500
 
+# Generate Feature1 and Feature2 for Class 0
 feature1_class0 <- rnorm(n, mean = 2, sd = 1)
-
 feature2_class0 <- rnorm(n, mean = 2, sd = 1)
 
+# Generate Feature1 and Feature2 for Class 1
 feature1_class1 <- rnorm(n, mean = 4, sd = 1)
-
 feature2_class1 <- rnorm(n, mean = 4, sd = 1)
 
+# Combine into data frames
 data_class0 <- data.frame(
   Feature1 = feature1_class0,
   Feature2 = feature2_class0,
@@ -713,9 +707,14 @@ data_class1 <- data.frame(
   Class = 1
 )
 
-
+# Combine both classes into one dataset
 data <- rbind(data_class0, data_class1)
 
+# Introduce some overlap by adding noise
+data$Feature1 <- data$Feature1 + rnorm(nrow(data), mean = 0, sd = 0.5)
+data$Feature2 <- data$Feature2 + rnorm(nrow(data), mean = 0, sd = 0.5)
+
+# Shuffle the dataset
 data <- data[sample(nrow(data)), ]
 ggplot(data, aes(x = Feature1, y = Feature2, color = factor(Class))) +
   geom_point(alpha = 0.7) +
@@ -729,7 +728,6 @@ ggplot(data, aes(x = Feature1, y = Feature2, color = factor(Class))) +
 
 ##### 2. Train-Test split
 
-
 ```{r}
 train_proportion <- 0.8
 train_indices <- sample(1:nrow(data), size = train_proportion * nrow(data))
@@ -737,10 +735,6 @@ train_indices <- sample(1:nrow(data), size = train_proportion * nrow(data))
 # Create training and testing sets
 train_data <- data[train_indices, ]
 test_data <- data[-train_indices, ]
-```
-
-```{r}
-
 ```
 
 ##### 3. Model training
@@ -752,11 +746,11 @@ sigmoid <- function(z) {
 }
 
 BCE_loss <- function(y_true, y_pred) {
-  #TO DO
+  -mean(y_true*log(y_pred)+(1-y_true)*log(1-y_pred))
 }
 
 logistic_gradient <- function(y_true, y_pred, X){
-  #TO DO
+  -colMeans( (y_true-y_pred)*X )
 }
 
 sgd_logistic_regression <- function(train_data, lr = 0.01, epochs = 100) {
@@ -780,52 +774,49 @@ sgd_logistic_regression <- function(train_data, lr = 0.01, epochs = 100) {
     
     for (batch in 1:num_batches) {
     batch_start <- 1 + batch_size * (batch - 1)
-    batch_end <- min(batch_size * batch, n)
+    batch_end <- min(batch_size * batch, nrow(X))
     batch_indices <- shuffled_indices[batch_start:batch_end]
    # Mini-batch
     X_batch <- X[batch_indices, , drop = FALSE]
     y_batch <- y[batch_indices]
-    # Update beta_hat
     z_batch <- X_batch %*% beta_hat
-    y_pred <- sigmoid(z_batch)
-    
-   gradient_batch <- logistic_gradient(y_batch, y_pred, X_batch)
-   gradient_norm <- sqrt(sum(gradient_batch^2))
-   
-   beta_hat <- beta_hat - lr^epoch * gradient_batch / (1e-8 + gradient_norm)
-   entropy_loss <- BCE_loss(y_batch, y_pred)
-   
+    y_hat <- as.vector(sigmoid(z_batch))
+
+    # Update beta_hat
+    gradient_batch <- logistic_gradient(y_batch, y_hat, X_batch)
+    gradient_norm <- sqrt(sum(gradient_batch^2))
+    beta_hat <- beta_hat - lr * gradient_batch / (1e-8 + gradient_norm)
+    entropy_loss <- BCE_loss(y_batch, y_hat)
+      
   }
 
-    z_all <- X %*% weights
-    y_hat_all <- sigmoid(z_all)
-    loss <- compute_loss(y, y_hat_all)
-    loss_history[epoch] <- loss
-
     if (epoch %% 10 == 0 || epoch == 1) {
-      cat("Epoch:", epoch, "- Loss:", round(loss, 4), "\n")
+      cat("Epoch:", epoch, "- Loss:", round(entropy_loss, 4), "\n")
     }
   }
   
-  return(list(weights = weights, loss_history = loss_history))
+  return(list(weights = beta_hat, loss_history = loss_history))
 }
 
 # Train the model
-result <- sgd_logistic_regression(train_data, learning_rate = 0.1, epochs = 100)
+result <- sgd_logistic_regression(train_data, lr = 0.1, epochs = 100)
 final_weights <- result$weights
 loss_history <- result$loss_history
 
 # Display final weights
 cat("Final Weights:\n")
 print(final_weights)
-
 ```
 
-
 ##### 4. Evaluation on test set
-```{r}
 
-# Extract testing features and labels
+The decision boundry is the hyperplane where
+$$
+\beta^Tx = 0 \rightarrow~~\beta_0+\beta_1x_1+\beta_2x_2=0\rightarrow ~~x_2=-\frac{\beta_0+\beta_1x_1}{\beta_2}
+$$
+Hence, for two-dimensional data, we can sample a sequence of x1 and obtain x2 according to the above decision boundry. This will give us a line that seperates the data.
+
+```{r}
 X_test <- as.matrix(test_data[, c("Feature1", "Feature2")])
 y_test <- test_data$Class
 
@@ -840,6 +831,17 @@ predictions_test <- ifelse(y_hat_test >= 0.5, 1, 0)
 # Calculate accuracy
 accuracy_test <- mean(predictions_test == y_test)
 
+beta0 <- final_weights[1]
+beta1 <- final_weights[2]
+beta2 <- final_weights[3]
+
+# Define decision boundary function
+decision_boundary <- function(x1) {
+  -(beta0 + beta1 * x1) / beta2
+}
+
+x1_vals <- seq(min(train_data$Feature1) - 1, max(train_data$Feature1) + 1, length.out = 100)
+x2_vals <- decision_boundary(x1_vals)
 ggplot(test_data, aes(x = Feature1, y = Feature2, color = factor(Class))) +
   geom_point(alpha = 0.7) +
   # Add the decision boundary using a separate data frame
@@ -851,8 +853,4 @@ ggplot(test_data, aes(x = Feature1, y = Feature2, color = factor(Class))) +
        y = "Feature 2",
        color = "Class") +
   theme_minimal()
-
-
-
 ```
-
