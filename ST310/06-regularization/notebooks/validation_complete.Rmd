@@ -382,4 +382,132 @@ SGD_path |>
   scale_color_viridis_d() + scale_y_log10()
 ```
 
+# Cross validation
+$$
+L(\beta) = \sum_{i=1}^{n} \left( y_i - X_i^T \beta \right)^2 + \lambda \left[ (1 - \alpha) \sum_{j=1}^{p} \beta_j^2 + \alpha \sum_{j=1}^{p} |\beta_j| \right]
+$$
+```{r}
+library(caret)     
+library(ggplot2)   
+library(dplyr)   
+library(glmnet)
+
+set.seed(123)
+n <- 500
+p <- 5
+X <- matrix(rnorm(n * p), nrow = n, ncol = p) 
+y <- 3 * X[, 1] - 2 * X[, 2] + rnorm(n)         
+dataset <- data.frame(X, y)
+
+# Step 2: Split Data into Training and Test Sets
+trainIndex <- sample(1:n, size = 0.8 * n)  #get training data index
+trainData <- dataset[trainIndex, ]
+testData <- dataset[-trainIndex, ] # testing is then the the whole data excludes training
+X_train <- as.matrix(trainData[, -ncol(trainData)])
+y_train <- trainData$y
+X_test <- as.matrix(testData[, -ncol(testData)])
+y_test <- testData$y
+
+# Step 3: Define Grid Search Parameters
+alpha_values <- c(0, 0.5, 1)  # Tuning alpha (0: Ridge, 1: Lasso, 0.5: Elastic Net)
+lambda_values <- seq(0.1, 1, length = 3)  # Tuning lambda (regularization parameter)
+
+# Step 4: Manual Cross-Validation with Grid Search
+k <- 5  
+folds <- sample(rep(1:k, length.out = nrow(X_train)))
+
+grid_results <- expand.grid(alpha = alpha_values, lambda = lambda_values)
+grid_results$mse <- NA
+grid_results$test_mse <- NA 
+```
+
+```{r}
+for (i in 1:nrow(grid_results)) {
+  alpha <- 
+  lambda <- 
+  mse_folds <- c()  
+
+  for (fold in 1:k) {
+    X_train_fold <- 
+    y_train_fold <-
+    X_valid_fold <- 
+    y_valid_fold <- 
+    model <- glmnet(X_train_fold, y_train_fold, alpha = alpha, lambda = lambda)
+    predictions <- 
+    
+    mse_fold <- 
+    mse_folds <- c(mse_folds, mse_fold)
+  }
+
+  grid_results$mse[i] <- 
+  
+  # evaluate the performance on the testing set
+  final_model <- glmnet(X_train, y_train, alpha = alpha, lambda = lambda)
+  test_predictions <- predict(final_model, X_test)
+  grid_results$test_mse[i] <- sqrt(mean((test_predictions - y_test)^2))
+}
+print(grid_results)
+```
+
+
+```{r}
+for (i in 1:nrow(grid_results)) {
+  alpha <- grid_results$alpha[i]
+  lambda <- grid_results$lambda[i]
+  mse_folds <- c()
+
+  for (fold in 1:k) {
+    X_train_fold <- X_train[folds != fold, ]
+    y_train_fold <- y_train[folds != fold]
+    X_valid_fold <- X_train[folds == fold, ]
+    y_valid_fold <- y_train[folds == fold]
+
+    model <- glmnet(X_train_fold, y_train_fold, alpha = alpha, lambda = lambda)
+    predictions <- predict(model, X_valid_fold)
+
+    mse_fold <- mean((predictions - y_valid_fold)^2)
+    mse_folds <- c(mse_folds, mse_fold)
+  }
+
+  grid_results$mse[i] <- mean(mse_folds)
+  
+  final_model <- glmnet(X_train, y_train, alpha = alpha, lambda = lambda)
+  test_predictions <- predict(final_model, X_test)
+  grid_results$test_mse[i] <- sqrt(mean((test_predictions - y_test)^2))
+}
+print(grid_results)
+```
+
+
+
+
+```{r}
+
+for (i in 1:nrow(grid_results)) {
+  alpha <- grid_results$alpha[i]
+  lambda <- grid_results$lambda[i]
+  mse_folds <- c()
+
+  for (fold in 1:k) {
+    X_train_fold <- X_train[folds != fold, ]
+    y_train_fold <- y_train[folds != fold]
+    X_valid_fold <- X_train[folds == fold, ]
+    y_valid_fold <- y_train[folds == fold]
+
+    model <- glmnet(X_train_fold, y_train_fold, alpha = alpha, lambda = lambda)
+    predictions <- predict(model, X_valid_fold)
+
+    mse_fold <- mean((predictions - y_valid_fold)^2)
+    mse_folds <- c(mse_folds, mse_fold)
+  }
+
+  grid_results$mse[i] <- mean(mse_folds)
+  
+  final_model <- glmnet(X_train, y_train, alpha = alpha, lambda = lambda)
+  test_predictions <- predict(final_model, X_test)
+  grid_results$test_mse[i] <- sqrt(mean((test_predictions - y_test)^2))
+}
+
+print(grid_results)
+```
 
