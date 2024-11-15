@@ -1,9 +1,9 @@
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 theme_set(theme_minimal(base_size = 12))
 ```
+
 # First part: Gradient descent and it numerical approximation
 
 ## Introduction
@@ -45,6 +45,7 @@ However, I've chosen the values here carefully. Right now it converges very slow
 
 This shows that **step sizes and the number of steps are important parts of any gradient descent implementation**, and performance will also depend on the function (and its gradient) and starting points.
 
+Global minimum and local minimum: A local minimum of a function is a point where the function value is smaller than at nearby points, but possibly greater than at a distant point. A global minimum is a point where the function value is smaller than at all other feasible points. Since the loss function usually has complicated curves, the optimization can easily fall into a local minimum.
 ### Step sizes 
 
 The step size is a scalar multiplier of the gradient. It's denoted $\gamma_n$ in the Wikipedia article and we'll keep that convention.

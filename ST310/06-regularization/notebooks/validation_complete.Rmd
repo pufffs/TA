@@ -55,9 +55,12 @@ c(nrow(data_train), nrow(data_test))
 ```
 
 ### Fit models
+Loess(Locally Estimated Scatterplot Smoothing): a non-parametric method used primarily for data smoothing and fitting curves to data in a flexible way. 
 
-Fit non-linear regression models on the training data using several different values of the complexity/smoothness parameter
+The span parameter takes a value between 0 and 1. It represents the fraction of the total data used in each local neighborhood when fitting a regression at a given point.
 
+small span: The result is a less smooth, more responsive fit that can closely follow local fluctuations, which can lead to overfitting if the span is too small.
+large span: The result is a smoother fit that is less responsive to local variations, which can lead to underfitting if the span is too large.
 ```{r}
 model1 <- loess(y ~ x, span = .9, data = data_train)
 model2 <- loess(y ~ x, span = .7, data = data_train)
@@ -121,7 +124,7 @@ Roughly .3 for this data
 
 ### Distribution shift / OOD generalization / bias
 
-Generate new test data that has a different distribution from the original data.
+OOD (out-of-distribution): Generate new test data that has a different distribution from the original data.
 
 **Question**: How many different ways can you think of to change the distribution of the new data?
 
