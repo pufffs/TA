@@ -1,0 +1,274 @@
+---
+title: 'Week 8: Lasso'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(broom)
+library(selectiveInference)
+library(glmnet)   
+library(ggplot2)  
+library(dplyr)
+theme_set(theme_minimal(base_size = 14))
+```
+# Lasso estimation
+
+$$
+\arg\min_{w \in \mathbb{R}^d} \frac{1}{2} \|Xw - y\|_2^2 + \lambda \|w\|_1
+$$
+
+Here, $\|w\|_1$ is the $\ell_1$ norm, defined as $\|w\|_1 = |w_1| + |w_2| + \cdots + |w_d|$. The goal of this exercise is to characterize the optimal solution of the above optimization problem.
+
+It is evident that the objective above is convex in $w$. Hence, all local minimizers are going to be global minimizers. A very easy way to find the local minima is to set the gradient of the objective to zero. But what is the gradient of $\|w\|_1$? at the point $0$, $\|w\|_1$ is not differentiable.
+
+However, one can construct a vector that works like a gradient, called a **subgradient**. Formally, a subgradient of a convex function $f: \mathbb{R}^d \to \mathbb{R}$ at the point $x$ is a vector $p$ such that for any point $z \in \mathbb{R}^d$:
+
+$$
+f(z) \geq f(x) + p^T (z - x)
+$$
+
+The set of all subgradients at the point $x$ is denoted by $\partial f(x)$. It can be shown that if $f$ is differentiable at the point $x$, there is only one subgradient, that is, $\partial f(x) = \nabla f(x)$.
+
+### Subgradient Example for $f(x) = |x|$
+1. For $f(x) = |x|$, find the subgradients at the point $x = 0$.
+   - For $x < 0$, the subgradient is unique and equal to the derivative: $f'(x < 0) = -1$. The same holds for positive $x$, hence $f'(x > 0) = +1$. At $x = 0$, the subgradient is defined by:
+   
+   $$
+   f(0) = [-1, 1]
+   $$
+
+2. Using the previous result, find the subgradients at the point $x = 0$ for the function $f(x) = \|x\|_1$.
+   - Given that $f(x) = \|x\|_1 = \sum_{i=1}^d |x_i|$, and defining $f_i(x) = |x_i|$, then:
+
+   $$
+   \partial f(x) = \sum_{i : x_i \neq 0} \text{sign}(x_i) e_i + \sum_{j : x_j = 0} [-e_j, e_j]
+   $$
+
+   where $e_i$ are the coordinate system unit vectors.
+
+### Subgradient of Lasso Problem
+3. By setting the subdifferential of the Lasso problem to include zero, we obtain:
+
+$$
+0 \in X^T (y - Xw) + \partial \|w\|_1
+$$
+
+which is the same as:
+
+$$
+X^T (y - Xw) = p
+$$
+
+for some $p \in \partial \|w\|_1$.
+
+### One-Dimensional Case
+Now we treat the one-dimensional case ($d = 1$). Similar arguments can be made for the general case, but we do not cover those for simplicity. Hence, our optimization problem becomes:
+
+$$
+\arg\min_{w \in \mathbb{R}} \frac{1}{2} \sum_{i=1}^n (x_i w - y_i)^2 + \lambda |w|
+$$
+
+The subdifferential of the one-dimensional problem is:
+
+$$
+\sum_{i=1}^n x_i (x_i w - y_i) + \lambda p = 0
+$$
+
+which in turn is equal to:
+
+$$
+\sum_{i=1}^n x_i^2 w - \sum_{i=1}^n x_i y_i + \lambda p = 0
+$$
+The optimal solution for the one-dimensional Lasso problem can be characterized by considering three cases:
+
+### Case 1: $w < 0$
+- In this case, the subgradient $p = -1$, and the condition for optimality becomes:
+  $$
+  \sum_{i=1}^n x_i^2 w = \sum_{i=1}^n x_i y_i - \lambda
+  $$
+  Solving for $w$:
+  $$
+  w = \frac{\sum_{i=1}^n x_i y_i - \lambda}{\sum_{i=1}^n x_i^2}
+  $$
+  Given that $w < 0$, this leads to the condition:
+  $$
+  \sum_{i=1}^n x_i y_i < \lambda
+  $$
+
+### Case 2: $w = 0$
+- For $w = 0$, the optimality condition requires that the subgradient $p$ lies within the interval $[-1, 1]$:
+  $$
+  -\lambda \leq \sum_{i=1}^n x_i y_i \leq \lambda
+  $$
+  This condition implies that the contribution of the data is not large enough to overcome the regularization penalty, resulting in the coefficient being set to zero.
+
+### Case 3: $w > 0$
+- In this case, the subgradient $p = 1$, and the condition for optimality becomes:
+  $$
+  \sum_{i=1}^n x_i^2 w = \sum_{i=1}^n x_i y_i + \lambda
+  $$
+  Solving for $w$:
+  $$
+  w = \frac{\sum_{i=1}^n x_i y_i + \lambda}{\sum_{i=1}^n x_i^2}
+  $$
+  Given that $w > 0$, this leads to the condition:
+  $$
+  \sum_{i=1}^n x_i y_i > -\lambda
+  $$
+
+### Summary
+To sum up, the optimal solution for $w$ can be expressed as:
+
+$$
+ w = \begin{cases}
+ \frac{\sum_{i=1}^n x_i y_i - \lambda}{\sum_{i=1}^n x_i^2} & \text{if } \sum_{i=1}^n x_i y_i < -\lambda \\
+ 0 & \text{if } -\lambda \leq \sum_{i=1}^n x_i y_i \leq \lambda \\
+ \frac{\sum_{i=1}^n x_i y_i + \lambda}{\sum_{i=1}^n x_i^2} & \text{if } \sum_{i=1}^n x_i y_i > \lambda
+ \end{cases}
+$$
+Since $$\sum_{i=1}^n x_i y_i$$ reflects the total variation between $x$ and $y$, and $\lambda$ controls the regularization level, if a variable's variation with $y$ is smaller than a certain level of $\lambda$ (either negative or positive), this variable will be forced to zero. And as we know variation $$\sum_{i=1}^n x_i y_i$$ reflects correlation, so Lasso algorithm enforces those trivial variables to zero and achieve variable selection.
+
+The following is an example of how Lasso zeros coefficients, the two trivial variables are shinkaged to zero even with very small $\lambda$. But if we increase $\lambda$ then all variables will be eliminated.
+
+```{r}
+library(glmnet)   
+library(ggplot2)  
+library(dplyr)    
+set.seed(123)    
+
+# Step 1: Simulate Dataset
+n <- 100
+p <- 5
+X <- matrix(rnorm(n * p), nrow = n, ncol = p) 
+beta <- c(3, 2, 1, 0, 0)    # Coefficients with some set to zero
+y <- X %*% beta + rnorm(n)            
+dataset <- data.frame(X, y)
+
+# Step 2: Fit Lasso Model with Varying Lambda
+lambda_values <- 10^seq(3, -2, length.out = 100)
+lasso_model <- glmnet(X, y, alpha = 1, lambda = lambda_values)
+
+# Step 3: Extract Coefficients for Plotting
+lasso_coefs <- as.matrix(coef(lasso_model))
+lasso_coefs <- as.data.frame(lasso_coefs[-1, ])  # Remove intercept row
+colnames(lasso_coefs) <- paste0("lambda_", seq_along(lambda_values))
+lasso_coefs$Feature <- rownames(lasso_coefs)
+lasso_coefs_long <- lasso_coefs %>%
+  pivot_longer(cols = -Feature, names_to = "Lambda", values_to = "Coefficient") %>%
+  mutate(lambda = as.numeric(gsub("lambda_", "", Lambda))) %>%
+  mutate(lambda_value = lambda_values[lambda])
+
+ggplot(lasso_coefs_long, aes(x = log(lambda_value), y = Coefficient, color = Feature)) +
+  geom_line() +
+  labs(title = "Lasso Coefficient Shrinkage Paths",
+       x = "Log(Lambda)",
+       y = "Coefficient Value",
+       color = "Feature") +
+  theme_minimal()
+```
+
+# Lasso inference
+
+#### Generate data for a high-dimensional regression
+
+```{r}
+set.seed(1) # delete this line
+n <- 100
+p <- 200
+X <- matrix(rnorm(n*p), nrow = n)
+Y <- rnorm(n)
+```
+In this simulation, X and Y are both randomly generated from normal distribution and are independent. So there is no association between X and Y.
+
+#### Fit the lasso solution path and choose a sparsity level automatically
+
+Note: this is an alternative method to cross-validation
+
+```{r}
+# Compute lasso path
+# while storing information required for
+# conditional (truncated) inference
+lasso_path <- lar(X, Y)
+# Use AIC/BIC to choose model size
+# and compute adjusted p-values
+# in higher dimensions change mult
+# to log(n) for BIC, log(p) for RIC
+sigma_hat <- estimateSigma(X, Y)$sigmahat
+lasso_inference <- larInf(lasso_path,
+                          sigma = sigma_hat,
+                          mult = 2,
+                          type = "aic",
+                          ntimes = 1)
+```
+
+Selected predictors
+
+```{r}
+active_set <- lasso_inference$vars
+active_set
+```
+
+#### Fit an OLS model using only selected variables, compute p-values the classical way
+
+(Use `summary()` or `tidy()` from the `broom` package)
+
+```{r}
+OLS_fit <- lm(Y ~ X[, active_set] - 1)
+tidy(OLS_fit)
+```
+
+#### Adjusted inference
+
+These p-values (from the `larInf` function in the `selectiveInference` package above) are calculated from a conditional distribution, conditional on the model selection.
+```{r}
+lasso_inference
+```
+
+#### How do the two sets of p-values compare? Which are "better", and why?
+
+Classical inference is biased toward significance. Even though the true coefficients are all zero we get many significant p-values. This is due to **model selection bias**. (Classical inference methods are based on an assumption of the model being chosen in advance, they become invalid if the model is chosen using the same data)
+
+In our experiment, X has 200 predictors and there will appear some predictors that correlate with Y purely by chance, provided the huge number of predictors. Even although we know these predictors are actually not significant, if we pick them out and run on OLS, they will appear to be significant. Because we use the training data to select these predictors, this introduces model selection bias, and if we use these predictors to fit the same data, over-fitting comes.
+
+Example: Here we have 200 predictors and use Lasso to select 4 of them for your model. The process of choosing those 4 predictors means that they were specifically chosen because they showed some correlation with the response. If you now calculate classical p-values on these 4 predictors, those p-values might be very low (suggesting strong significance), but this does not take into account the fact that you tried many combinations before choosing these 4.
+
+Classical Approach: Ignores that 94 other predictors were tested and rejected, thus underestimating the variability in the estimates.
+
+Conditional Inference Approach: The larInf() function calculates the p-values while conditioning on the fact that the model selection process has already occurred. This approach knows that the 4 predictors were chosen because they appeared most relevant and thus adjusts the p-values to reflect that selection bias.
+
+#### Compare to p-values calculated on a new set of test data
+
+```{r}
+X_test <- matrix(rnorm(n*p), nrow = n)
+Y_test <- rnorm(n)
+lm(Y_test ~ X_test[, active_set] - 1) %>% tidy()
+```
+Now we generate some testing data from the same distribution (standard normal), if we run OLS with the selected 4 predictors on the new data, we get very large p-values. Inference calculated using test data is does not suffer from the model selection bias because this data wasn't used to select the model.
+
+#### Rerun the code several times and observe the variability
+
+The model changes each time, and so do the p-values, but the qualitative conclusion remains the same:
+
+- Classical inference methods are biased if they are computed on the same data that was used to select the model
+- Inference on test data can avoid this problem
+- Specialized inference methods can correct the bias without needing more test data (advanced topic)
+
+#### Change `Y` to be generated from a coefficient vector where only the first 5 entries are nonzero and then run the code again a few more times.
+This means that the response variable Y is influenced only by the first 5 predictors of X, while the remaining predictors have no true effect. So if we run the Lasso, the active_set will contain the first 5 predictors.
+
+```{r}
+X <- matrix(rnorm(n*p), nrow = n)
+beta <- c(rep(1, 5), rep(0, p - 5))
+Y <- X %*% beta + rnorm(n)
+```
+Now if we use the first 5 predictors to run OLS on the test set, we can still get significant results, which is contrary to the previous inferences. This is because the Y and Y_test is generated by using only the first 5 predictors, there are indeed correlations between response and first 5 predictors.
+
+If the classical p-values remain significant on the test data, it suggests that the selected features genuinely have predictive power (as in this case); otherwise, their significance on the training data was due to overfitting.
+```{r}
+X_test <- matrix(rnorm(n*p), nrow = n)
+Y_test <- X_test %*% beta + rnorm(n)
+lm(Y_test ~ X_test[, 1:5] - 1) %>% tidy()
+```
+
+
