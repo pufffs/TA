@@ -51,7 +51,7 @@ The set of all subgradients at the point $x$ is denoted by $\partial f(x)$. It c
 3. By setting the subdifferential of the Lasso problem to include zero, we obtain:
 
 $$
-0 \in X^T (y - Xw) + \partial \|w\|_1
+0 \in X^T (Xw-y) + \partial \|w\|_1
 $$
 
 which is the same as:
@@ -183,8 +183,13 @@ In this simulation, X and Y are both randomly generated from normal distribution
 
 #### Fit the lasso solution path and choose a sparsity level automatically
 
-Note: this is an alternative method to cross-validation
+Lasso path: represents how the coefficients of the model evolve as the regularization strength $\lambda$ varies.
 
+sigma_hat: the estimated standard deviation of the error term. It is used in larInf() to correctly adjust for the residual variance when calculating p-values and confidence intervals.
+
+mult: multiplier, may change in different scenarios (BIC)
+
+ntimes: the number of times the selection inference is to be repeated.
 ```{r}
 # Compute lasso path
 # while storing information required for
