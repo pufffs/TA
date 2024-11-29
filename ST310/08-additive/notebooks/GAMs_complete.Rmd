@@ -9,8 +9,257 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(broom)
 library(modelr)
+library(gam)
+library(plotmo)
 theme_set(theme_minimal(base_size = 14))
 ```
+
+# Single variable
+
+### Polynomial Regression
+Polynomial regression extends the capabilities of linear regression by incorporating polynomial terms of the predictor variable. This allows the model to capture nonlinear relationships between the predictor and response variables. A polynomial regression model of degree p is defined as:
+$$
+y = \beta_0 + \beta_1 x + \beta_2 x^2 + \dots + \beta_p x^p + \epsilon
+$$
+**Example**
+
+Consider a quadratic regression model  p = 3: 
+
+$$
+y = \beta_0 + \beta_1 x + \beta_2 x^2 +\beta_3x^3 +\epsilon
+$$
+
+#### Degrees of Freedom
+
+In polynomial regression, the degrees of freedom (df) correspond to the number of parameters estimated. For a polynomial of degree p, there are p + 1 parameters:
+
+$$
+\text{df} = p + 1
+$$
+### Step Functions
+
+A step function partitions the range of the predictor variable x into intervals and assigns a constant value to each interval. For K intervals defined by knots $( \kappa_1, \kappa_2, \dots, \kappa_K )$, the step function is expressed as:
+
+$$
+s(x) = \beta_0 + \beta_1 \mathbf{1}_{x > \kappa_1} + \beta_2 \mathbf{1}_{x > \kappa_2} + \dots + \beta_K \mathbf{1}_{x > \kappa_K}
+$$
+**Example**
+
+Consider a predictor x with knots at $( \kappa_1 = 2 )$ and $( \kappa_2 = 5 )$. The step function model is:
+
+$$
+s(x) = \beta_0 + \beta_1 \mathbf{1}_{x > 2} + \beta_2 \mathbf{1}_{x > 5}
+$$
+**Transition to Basis Functions**
+
+While step functions provide a piecewise constant approximation, they lack smoothness and flexibility. To enhance the model's capability, basis functions are introduced. Basis functions transform the predictor variable into a set of new features, enabling more nuanced and flexible relationships.
+
+A basis function $b_j(x)$ is a function that transforms the original predictor x into a new feature. The regression model using basis functions is:
+
+$$
+y = \beta_0 + \beta_1 b_1(x) + \beta_2 b_2(x) + \dots + \beta_M b_M(x) + \epsilon
+$$
+Step functions can be viewed as a specific case of basis functions where each basis function is an indicator function. Specifically:
+
+$$
+b_k(x) = \mathbf{1}_{x > \kappa_k} \quad \text{for } k = 1, 2, \dots, K
+$$
+
+Thus, the step function model is a linear combination of these indicator basis functions.
+
+##### Examples of Basis Functions
+
+1. **Polynomial Basis Functions:**
+
+   $$
+   b_j(x) = x^j \quad \text{for } j = 0, 1, \dots, p
+   $$
+
+2. **Trigonometric Basis Functions:**
+
+   $$
+   b_{2k-1}(x) = \sin(kx), \quad b_{2k}(x) = \cos(kx) \quad \text{for } k = 1, 2, \dots, K
+   $$
+   
+## Piecewise Polynomials
+
+To overcome the limitations of step functions, piecewise polynomials allow the response variable to change smoothly across different intervals. This is achieved by fitting low-degree polynomials within each interval defined by the knots.
+
+A piecewise polynomial of degree d with K knots $( \{\kappa_1, \kappa_2, \dots, \kappa_K\} )$ is defined as:
+
+$$
+y = 
+\begin{cases}
+p_1(x) & \text{if } x \leq \kappa_1 \\
+p_2(x) & \text{if } \kappa_1 < x \leq \kappa_2 \\
+\vdots & \vdots \\
+p_{K+1}(x) & \text{if } x > \kappa_K
+\end{cases}
+$$
+
+where each $( p_j(x) )$ is a polynomial of degree d.
+
+#### Continuity Constraints
+
+To ensure the spline is smooth across the knots, continuity constraints are imposed. Specifically, for a spline of degree d, we require that the function and its first d-1 derivatives are continuous at each knot $\kappa_k $.
+
+**Example: Cubic Splines**
+$$
+  y_1 = \beta_{10} + \beta_{11}x + \beta_{12}x^2 + \beta_{13}x^3
+  $$
+
+- For $x > \kappa$:
+  
+  $$
+  y_2 = \beta_{20} + \beta_{21}x + \beta_{22}x^2 + \beta_{23}x^3
+  $$
+#### 1. Function Continuity
+$$
+\beta_{10} + \beta_{11}\kappa + \beta_{12}\kappa^2 + \beta_{13}\kappa^3 = \beta_{20} + \beta_{21}\kappa + \beta_{22}\kappa^2 + \beta_{23}\kappa^3
+$$
+Remove one df, for example, $\beta_{10}$ can not vary independently, since its value is determined by the other 7 $\beta$ values.
+#### 2. First Derivative Continuity
+
+The first derivative (slope) of the spline must be the same from both sides of the knot.
+$$
+y'_1 = \beta_{11} + 2\beta_{12}x + 3\beta_{13}x^2
+$$
+
+$$
+y'_2 = \beta_{21} + 2\beta_{22}x + 3\beta_{23}x^2
+$$
+
+$$
+\beta_{11} + 2\beta_{12}\kappa + 3\beta_{13}\kappa^2 = \beta_{21} + 2\beta_{22}\kappa + 3\beta_{23}\kappa^2
+$$
+#### 3. Second Derivative Continuity
+
+The second derivative (curvature) of the spline must be the same from both sides of the knot.
+$$
+y''_1 = 2\beta_{12} + 6\beta_{13}x
+$$
+
+$$
+y''_2 = 2\beta_{22} + 6\beta_{23}x
+$$
+
+$$
+2\beta_{12} + 6\beta_{13}\kappa = 2\beta_{22} + 6\beta_{23}\kappa
+$$
+### Summary of Continuity Constraints
+
+For each knot \( \kappa \) in a cubic spline, the following three equations must be satisfied to ensure smoothness:
+
+1. **Function Continuity:**
+   $$
+   \beta_{10} + \beta_{11}\kappa + \beta_{12}\kappa^2 + \beta_{13}\kappa^3 = \beta_{20} + \beta_{21}\kappa + \beta_{22}\kappa^2 + \beta_{23}\kappa^3
+   $$
+
+2. **First Derivative Continuity:**
+   $$
+   \beta_{11} + 2\beta_{12}\kappa + 3\beta_{13}\kappa^2 = \beta_{21} + 2\beta_{22}\kappa + 3\beta_{23}\kappa^2
+   $$
+
+3. **Second Derivative Continuity:**
+   $$
+   2\beta_{12} + 6\beta_{13}\kappa = 2\beta_{22} + 6\beta_{23}\kappa
+   $$
+
+Each knot introduces three additional equations that link the coefficients of adjacent polynomial segments, ensuring the spline remains smooth across the entire domain. Each knot reduces 3 degrees of freedom.
+
+For cubic splines with K knots, the degrees of freedom is:
+   
+   $$
+   \text{df} = 4(K + 1) - 3K = K + 4
+   $$
+
+
+## Regression Splines
+
+Regression splines extend the concept of piecewise polynomials by incorporating basis functions that enforce smoothness and continuity across knots. A common approach to constructing regression splines is to use truncated power basis functions.
+$$
+y =\beta_0 + \beta_1 x + \beta_2 x^2 + \beta_3 x^3 + \sum_{k=1}^K \beta_{k+3} (x - \kappa_k)_+^3 + \epsilon
+$$
+
+##### Ensuring Continuity
+
+Now consider cubic spline model with one know $\kappa$:
+$$y =\beta_0 + \beta_1 x + \beta_2 x^2 + \beta_3 x^3 +\beta_4 (x - \kappa)_+^3 + \epsilon$$
+
+##### Value of the Function at the knot
+
+For $x < \kappa$, the function is simply:
+
+$$
+ y = \beta_0 + \beta_1 x + \beta_2 x^2 + \beta_3 x^3
+$$
+for $x \geq \kappa$, the function is 
+$$y =\beta_0 + \beta_1 x + \beta_2 x^2 + \beta_3 x^3 +\beta_4 (x - \kappa)^3$$
+At the knot $x=\kappa$, the two are equal.
+
+##### First Derivative
+
+The first derivative of y for $x < \kappa$ is:
+
+$$
+ y' = \beta_1 + 2 \beta_2 x + 3 \beta_3 x^2
+$$
+For $x \geq \kappa$, the derivative of the truncated power term is:
+$$
+ y' = \beta_1 + 2 \beta_2 x + 3 \beta_3 x^2 + \beta_4 \cdot 3 (x - \kappa)^2
+$$
+At $x=\kappa$, they are equal.
+
+##### Second Derivative
+
+The second derivative for $x < \kappa$ is:
+
+$$
+ y'' = 2 \beta_2 + 6 \beta_3 x
+$$
+
+For $x \geq \kappa$, the derivative of the truncated power term is:
+
+$$
+ y'' = 2 \beta_2 + 6 \beta_3 x + \beta_4 \cdot 6 (x - \xi)
+$$
+At $x = \kappa$, the term $(x - \kappa)$ evaluates to zero, they are equal.
+
+##### Third Derivative
+
+The third derivative for $x < \kappa$ is:
+
+$$
+ y''' = 6 \beta_3
+$$
+
+For $x \geq \kappa$, the third derivative of the truncated power term is:
+
+$$
+ y''' = 6 \beta_3 + 6\beta_4
+$$
+At $x = \kappa$, the third derivative changes abruptly because the term $6\beta_4$ is added when $x \geq \kappa$. This means there is a discontinuity in the third derivative at the knot.
+
+# Multi-variable regression: GAMs
+A **Generalized Additive Model (GAM)** extends the traditional generalized linear model by allowing each predictor variable to have its own smooth function. This flexibility enables the modeling of complex, nonlinear relationships between the predictors and the response variable.
+$$
+y = \beta_0 + f_1(X_1) + f_2(X_2) + \dots + f_p(X_p) + \epsilon
+$$
+Example: Modeling $ X_1 $ Linearly and $ X_2 $ with a Cubic Spline
+The GAM can be expressed as:
+$$
+y = \beta_0 + \beta_1 X_1 + f(X_2) + \epsilon
+$$
+
+Where $f(X_2)$ is defined using a cubic spline with one knot at $ \kappa $:
+
+$$
+f(X_2) = \beta_2 X_2 + \beta_3 X_2^2 + \beta_4 X_2^3 + \beta_5 (X_2 - \kappa)_+^3
+$$
+The model then becomes:
+$$
+y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \beta_3 X_2^2 + \beta_4 X_2^3 + \beta_5 (X_2 - \kappa)_+^3 + \epsilon
+$$
 
 ## Simulate data from an additive model
 
@@ -37,9 +286,9 @@ df <- data.frame(
 Fit a GAM, show the partial dependence plots
 
 ```{r message=FALSE}
-library(gam)
 fit_gam <- gam(y ~ lo(x1) + lo(x2) + lo(x3), data = df)
 ```
+lo(): local regression, in above formula we fit each variable by local regression. we can also use s(), regression splines.
 
 Try `plot`, and if you have the `plotmo` library try `plotmo` with `all2 = TRUE`
 
@@ -49,15 +298,12 @@ plot(fit_gam)
 ```
 
 ```{r message = FALSE}
-library(plotmo)
 plotmo(fit_gam, all2 = TRUE)
 ```
 
 
 ```{r}
-# Don't need to change anything in this code chunk
-# predict for range of xj values
-# with other predictors replaced by their mean
+# partial_predict(j,df, obj): predict on the j-th variable in the df by using 'obj'(some model)
 partial_predict <- function(j, df, obj) {
   xj <- paste0("x", j)
   newdf <- df |> 
@@ -71,12 +317,12 @@ partial_plot <- function(j) {
   fj <- paste0("f", j)
   ggplot(df, aes(get(xj), y)) +
     geom_point(alpha = .5) +
-    geom_smooth() +
-    geom_line(aes(y = partial_predict(j, df, fit_gam)), color = "red") + 
+    geom_smooth() +   #estimation by smoothing (usually loess)
+    geom_line(aes(y = partial_predict(j, df, fit_gam)), color = "red") + #estimation by gam
     xlab(xj) + ylab("") +
     geom_function(fun = get(fj),
-                  size = 1,
-                  color = "green") +
+                  linewidth = 1,
+                  color = "green") + #true function
     theme(axis.text.x=element_blank(),
           axis.ticks.x=element_blank())
 }
@@ -103,7 +349,7 @@ p1 + p2 + p3
 
 **Question**: When/why might some of the estimated functions be shifted up/down?
 
-**Answer**: If the outcome variable is not centered then the intercept may be estimated as nonzero. Then, for example, the estimate of f1 could be shifted upward by that amount and the estimate of f2 shifted downward by the same amount without changing the overall model's predictions.
+**Answer**: If the outcome variable is not centered then the intercept may be estimated as nonzero. Then, for example, the estimate of f1 could be shifted upward by that amount and the estimate of f2 shifted downward by the same amount without changing the overall model's predictions. E.g. f1 and f3 has positive intercept and f2 has negative intercept.
 
 ## Sparse additive non-linear models
 
@@ -192,8 +438,8 @@ df <- data.frame(
   x3 = 2*rbeta(n, 1, 3) + confounder
 ) |> 
   mutate(
-#    y = x1 * x2^2  + 
-      y = f1(x1) + f2(x2) + f3(x3) + rnorm(n, sd = 1)
+    #y = x1 * x2^2 + log(abs(x3 + 1)) + rnorm(n, sd = 1)
+    y = f1(x1) + f2(x2) + f3(x3) + rnorm(n, sd = 1)
 ) |> mutate(y = y - mean(y))
 
 fit_gam <- gam(y ~ lo(x1) + lo(x2) + lo(x3), data = df)
