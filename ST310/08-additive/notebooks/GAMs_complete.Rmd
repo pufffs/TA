@@ -461,3 +461,4 @@ It seems that if some predictors are correlated then the GAM model does better t
 **Question**: What does the GAM get wrong?
 
 If the true CEF is not additive then the GAM may fit poorly, and our interpretations of the GAM could be misleading us about the true CEF (which may be more dangerous because they are plots, and plots are very convincing!)
+
